@@ -4,7 +4,9 @@
   "license": "MIT",
   "scripts": {
     "build": "hardhat compile",
-    "test": "hardhat test"
+    "test": "hardhat test",
+    "export-abi": "node scripts/export-abi.js",
+    "deploy": "hardhat run scripts/deploy.js --network monadTestnet"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-chai-matchers": "^2.1.0",
