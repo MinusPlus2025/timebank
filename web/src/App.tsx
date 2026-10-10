@@ -392,12 +392,21 @@ function Thank({ s, lang, phase, me, helper }: Ctx & { me: Me; helper: Hex }) {
             className={c.id === category ? "category on" : "category"}
             aria-pressed={c.id === category}
             onClick={() => setCategory(c.id)}
-            animate={{ scale: c.id === category ? 1.04 : 1, y: c.id === category ? -3 : 0 }}
             whileTap={{ scale: 0.95 }}
             transition={spring}
           >
-            <WindowTile phase={phase} tile={c.tile} />
+            <motion.span
+              className="category-art"
+              animate={{ scale: c.id === category ? 1.06 : 0.94, opacity: c.id === category ? 1 : 0.55, filter: c.id === category ? "grayscale(0)" : "grayscale(0.7)" }}
+              transition={spring}
+            >
+              {c.id === category && <motion.span layoutId="category-glow" className="category-glow" transition={spring} />}
+              <WindowTile phase={phase} tile={c.tile} />
+            </motion.span>
             <span>{c[lang]}</span>
+            <span className="category-dot" aria-hidden>
+              {c.id === category && <motion.span layoutId="category-dot" className="category-dot-on" transition={spring} />}
+            </span>
           </motion.button>
         ))}
       </div>
