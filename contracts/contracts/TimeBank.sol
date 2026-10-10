@@ -36,6 +36,8 @@ contract TimeBank {
     mapping(bytes32 => Member) public members;
     mapping(bytes32 => bytes32) public certifiedCommunity;
     mapping(bytes32 => uint256[]) private _sealsOf;
+    /// @notice A family member who may confirm help on behalf of someone who cannot use a phone.
+    mapping(bytes32 => bytes32) public guardianOf;
     Seal[] public seals;
     uint64 public poolBalance;
 
@@ -55,6 +57,11 @@ contract TimeBank {
     event Granted(bytes32 indexed to, uint32 minutes_);
     event Certified(bytes32 indexed id, bytes32 community);
     event PresenceVerified(bytes32 indexed challenge, bytes32 indexed id, bytes32 community);
+    event GuardianSet(bytes32 indexed member, bytes32 indexed guardian);
+    // Emitted alongside Sealed when a guardian, not the receiver, confirmed the help.
+    event ConfirmedByGuardian(uint256 indexed sealId, bytes32 indexed guardian);
+    // A verified visitor at a member's door, so their guardian can be told.
+    event Visited(bytes32 indexed host, bytes32 indexed visitor, bytes32 community);
 
     error NotSteward();
     error AlreadyRegistered();
@@ -63,6 +70,7 @@ contract TimeBank {
     error SameMember();
     error BadSignature(bytes32 id);
     error InsufficientHours(bytes32 id);
+    error NoGuardian(bytes32 id);
 
     constructor(address steward_) {
         steward = steward_;
@@ -113,14 +121,49 @@ contract TimeBank {
         WebAuthnP256.Assertion calldata helperSig,
         WebAuthnP256.Assertion calldata receiverSig
     ) external returns (uint256 sealId) {
+        Member storage r = _member(receiver);
+        bytes32 digest = sealDigest(helper, receiver, minutes_, category, redeem);
+        if (!digest.verify(receiverSig, r.x, r.y)) revert BadSignature(receiver);
+        sealId = _seal(helper, receiver, minutes_, category, redeem, digest, helperSig, receiverSig.r);
+    }
+
+    /// @notice Same as seal, but the receiver's guardian confirms instead of the receiver,
+    /// for people who cannot use a phone. The helper can never be their own witness.
+    function sealByGuardian(
+        bytes32 helper,
+        bytes32 receiver,
+        uint32 minutes_,
+        uint8 category,
+        bool redeem,
+        WebAuthnP256.Assertion calldata helperSig,
+        WebAuthnP256.Assertion calldata guardianSig
+    ) external returns (uint256 sealId) {
+        _member(receiver);
+        bytes32 guardian = guardianOf[receiver];
+        if (guardian == bytes32(0)) revert NoGuardian(receiver);
+        if (guardian == helper) revert SameMember();
+        Member storage g = _member(guardian);
+        bytes32 digest = sealDigest(helper, receiver, minutes_, category, redeem);
+        if (!digest.verify(guardianSig, g.x, g.y)) revert BadSignature(guardian);
+        sealId = _seal(helper, receiver, minutes_, category, redeem, digest, helperSig, guardianSig.r);
+        emit ConfirmedByGuardian(sealId, guardian);
+    }
+
+    function _seal(
+        bytes32 helper,
+        bytes32 receiver,
+        uint32 minutes_,
+        uint8 category,
+        bool redeem,
+        bytes32 digest,
+        WebAuthnP256.Assertion calldata helperSig,
+        bytes32 witnessR
+    ) private returns (uint256 sealId) {
         if (minutes_ == 0 || minutes_ > MAX_MINUTES_PER_SEAL) revert InvalidMinutes();
         if (helper == receiver) revert SameMember();
         Member storage h = _member(helper);
-        Member storage r = _member(receiver);
-
-        bytes32 digest = sealDigest(helper, receiver, minutes_, category, redeem);
+        Member storage r = members[receiver];
         if (!digest.verify(helperSig, h.x, h.y)) revert BadSignature(helper);
-        if (!digest.verify(receiverSig, r.x, r.y)) revert BadSignature(receiver);
         h.nonce++;
         r.nonce++;
 
@@ -131,11 +174,52 @@ contract TimeBank {
         h.balance += minutes_;
 
         sealId = seals.length;
-        bytes32 seed = keccak256(abi.encode(helperSig.r, receiverSig.r, sealId));
+        bytes32 seed = keccak256(abi.encode(helperSig.r, witnessR, sealId));
         seals.push(Seal(helper, receiver, minutes_, category, redeem, uint64(block.timestamp), seed));
         _sealsOf[helper].push(sealId);
         _sealsOf[receiver].push(sealId);
         emit Sealed(sealId, helper, receiver, minutes_, category, redeem, seed);
+    }
+
+    function dependentDigest(bytes32 guardian) public view returns (bytes32) {
+        return keccak256(abi.encode("TimeBank.dependent", block.chainid, address(this), guardian, members[guardian].nonce));
+    }
+
+    /// @notice A family member opens an account for someone without a phone (e.g. a parent with dementia).
+    /// The account has no key of its own, so only its guardian can ever confirm for it.
+    function registerDependent(bytes32 guardian, WebAuthnP256.Assertion calldata sig) external returns (bytes32 id) {
+        Member storage g = _member(guardian);
+        bytes32 digest = dependentDigest(guardian);
+        if (!digest.verify(sig, g.x, g.y)) revert BadSignature(guardian);
+        g.nonce++;
+        id = digest; // unique per guardian and nonce, and never equal to a key-derived id
+        members[id] = Member({x: 0, y: 0, balance: 0, nonce: 0, exists: true});
+        guardianOf[id] = guardian;
+        emit Registered(id);
+        emit GuardianSet(id, guardian);
+    }
+
+    function guardianDigest(bytes32 member, bytes32 guardian) public view returns (bytes32) {
+        return keccak256(abi.encode("TimeBank.guardian", block.chainid, address(this), member, guardian, members[member].nonce));
+    }
+
+    /// @notice A member who has a passkey chooses (or removes, with 0) a guardian while they still can.
+    function setGuardian(bytes32 member, bytes32 guardian, WebAuthnP256.Assertion calldata sig) external {
+        Member storage m = _member(member);
+        if (guardian == member) revert SameMember();
+        if (guardian != bytes32(0)) _member(guardian);
+        if (!guardianDigest(member, guardian).verify(sig, m.x, m.y)) revert BadSignature(member);
+        m.nonce++;
+        guardianOf[member] = guardian;
+        emit GuardianSet(member, guardian);
+    }
+
+    /// @notice For people who can no longer consent, the community steward records the guardian.
+    function appointGuardian(bytes32 member, bytes32 guardian) external onlySteward {
+        _member(member);
+        if (guardian != bytes32(0)) _member(guardian);
+        guardianOf[member] = guardian;
+        emit GuardianSet(member, guardian);
     }
 
     function giftDigest(bytes32 from, bytes32 to, uint32 minutes_) public view returns (bytes32) {
@@ -207,6 +291,21 @@ contract TimeBank {
         Member storage m = _member(id);
         if (!challenge.verify(sig, m.x, m.y)) revert BadSignature(id);
         emit PresenceVerified(challenge, id, certifiedCommunity[id]);
+    }
+
+    function visitDigest(bytes32 host, bytes32 challenge) public view returns (bytes32) {
+        return keccak256(abi.encode("TimeBank.visit", block.chainid, address(this), host, challenge));
+    }
+
+    /// @notice Door check at a known member's home: proves the visitor like checkIn, and also
+    /// tells the host's guardian who is at the door. The visitor signs which door they are at.
+    function visit(bytes32 visitor, bytes32 host, bytes32 challenge, WebAuthnP256.Assertion calldata sig) external {
+        Member storage m = _member(visitor);
+        _member(host);
+        if (!visitDigest(host, challenge).verify(sig, m.x, m.y)) revert BadSignature(visitor);
+        bytes32 community = certifiedCommunity[visitor];
+        emit PresenceVerified(challenge, visitor, community);
+        emit Visited(host, visitor, community);
     }
 
     function sealsOf(bytes32 id) external view returns (uint256[] memory) {

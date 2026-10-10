@@ -33,7 +33,7 @@ The app follows the viewer's local clock: green walls and pink rooms by day, ind
 - **Privacy.** On-chain data is only pseudonymous ids, minutes and a category code. Names stay on the phone. No health data and no free text go on-chain.
 
 ## Why Monad
-**Measured on Monad testnet**, contract `0x5CffF39486db8bD4FAd3826A7B19E92312A2949e`: a two-passkey seal checks 2 WebAuthn signatures on-chain, uses **305,604 gas**, and is **confirmed in 619 ms**. A door check signed by the real person returns true and one signed by an impostor returns false. See `contracts/scripts/smoke.js`.
+**Measured on Monad testnet**, current contract `0x3AE397E6dc65F8918F8C6d264Dc459D6fa939Db5`: a two-passkey seal checks 2 WebAuthn signatures on-chain, uses **328,720 gas**, and was confirmed in **1.6 s** end to end from our test machine (619 ms / 305,604 gas on the first version, `0x5CffF394…49e`; latency includes our network path). A door check signed by the real person returns true and one signed by an impostor returns false. See `contracts/scripts/smoke.js`.
 
 - **P256 precompile at `0x0100`.** Phone passkeys sign with P-256. Monad verifies those signatures natively, so every seal checks two real Face ID signatures on-chain cheaply. Without the precompile this would cost hundreds of thousands of gas in pure Solidity.
 - **Sub-second finality.** Sealing and door checks happen face to face. A result in about a second feels like a stamp landing. Twelve-second blocks would not.

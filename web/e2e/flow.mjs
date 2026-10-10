@@ -11,10 +11,13 @@ const BASE = process.argv[2] || "http://localhost:5173/";
 const SHOTS = process.argv[3] || "";
 const VIEWPORT = { width: 390, height: 844 };
 
-const browser = await chromium.launch();
+// E2E_PROXY: route the browser through an outbound proxy (e.g. to reach a public testnet RPC from CI).
+const PROXY = process.env.E2E_PROXY;
+// Only https goes through it, so the local dev server stays direct.
+const browser = await chromium.launch(PROXY ? { args: [`--proxy-server=https=${new URL(PROXY).host}`] } : {});
 
 async function person(name) {
-  const context = await browser.newContext({ viewport: VIEWPORT, locale: "zh-CN", deviceScaleFactor: 2 });
+  const context = await browser.newContext({ viewport: VIEWPORT, locale: "zh-CN", deviceScaleFactor: 2, ignoreHTTPSErrors: !!PROXY });
   const page = await context.newPage();
   page.on("pageerror", (e) => console.error(`[${name}] page error:`, e.message));
   const cdp = await context.newCDPSession(page);
@@ -65,7 +68,10 @@ async function register(p) {
     await shot(p, "01-welcome");
   }
   await p.page.click("button.primary");
-  await p.page.waitForSelector(".headline");
+  await p.page.waitForSelector(".headline", { timeout: 45000 }).catch(async (e) => {
+    console.error(`[${p.name}] register failed:`, await p.page.textContent("main"));
+    throw e;
+  });
   const me = JSON.parse(await p.page.evaluate(() => localStorage.getItem("timebank.me")));
   console.log(`registered ${p.name} ${me.id}`);
   return me.id;
@@ -151,13 +157,56 @@ await mom.page.waitForTimeout(1500);
 await shot(mom, "09-door-verified");
 console.log("door:", (await mom.page.textContent(".verified")).trim());
 
-// 5. English locale renders the wax-seal style.
+// 5. Guardian: 小王 opens an account for 爸爸, who has no phone. 小赵 visits and helps;
+//    小王 is told who is at the door and confirms the help from another city.
+await wang.page.goto(`${BASE}#/family/new`);
+await wang.page.fill("input", "爸爸");
+await wang.page.click("button.primary");
+await wang.page.waitForSelector(".family-card img.qr", { timeout: 30000 });
+await shot(wang, "12-family-card");
+const dadUrl = await wang.page.getAttribute(".family-card img.qr", "data-url");
+await wang.page.goto(`${BASE}#/family`);
+await wang.page.waitForSelector(".family-list li");
+await zhao.page.goto(dadUrl);
+await zhao.page.getByRole("button", { name: "我到门口了" }).click();
+await zhao.page.waitForSelector(".note.ok", { timeout: 30000 });
+await wang.page.waitForSelector(".visit-notice", { timeout: 30000 });
+await wang.page.waitForTimeout(600);
+await shot(wang, "13-family-visit");
+console.log("visit:", (await wang.page.textContent(".visit-notice p")).trim());
+await zhao.page.getByRole("button", { name: "我帮了 TA" }).click();
+await zhao.page.getByRole("button", { name: "陪伴" }).click();
+await zhao.page.getByRole("radio", { name: "1 小时", exact: true }).click();
+await zhao.page.click("button.primary");
+const witnessUrl = await zhao.page.getAttribute("img.qr", "data-url", { timeout: 30000 });
+await wang.page.goto(witnessUrl);
+const confirmBtn = wang.page.getByRole("button", { name: "属实，刷脸确认" });
+await confirmBtn.waitFor();
+await wang.page.waitForTimeout(500);
+await shot(wang, "14-witness");
+await confirmBtn.click();
+await wang.page.waitForSelector(".celebrate", { timeout: 30000 }).catch(async (e) => {
+  console.error("witness failed:", await wang.page.textContent("main"));
+  throw e;
+});
+console.log("小赵 balance after guardian seal:", await balance(zhao));
+
+// 6. Simple mode for 妈妈: one number, three large buttons.
+await mom.page.goto(BASE + "#/");
+await mom.page.getByRole("button", { name: "长辈模式" }).click();
+await mom.page.waitForSelector(".elder-home");
+await mom.page.waitForFunction(() => !document.querySelector(".elder-balance strong")?.textContent?.includes("…"));
+await shot(mom, "15-elder-home");
+await mom.page.getByRole("button", { name: "长辈模式" }).click();
+
+// 7. English locale renders the wax-seal style.
+await wang.page.goto(BASE + "#/");
 await wang.page.getByRole("button", { name: "EN" }).click();
 await wang.page.waitForSelector(".facade-grid .tile-button");
 await wang.page.waitForTimeout(800);
 await shot(wang, "10-home-en");
 
-// 6. Web layout on a laptop-sized screen.
+// 8. Web layout on a laptop-sized screen.
 await wang.page.getByRole("button", { name: "中文" }).click();
 await wang.page.setViewportSize({ width: 1440, height: 900 });
 await wang.page.waitForTimeout(900);

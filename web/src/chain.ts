@@ -1,14 +1,16 @@
 import { createPublicClient, defineChain, http, type Hex } from "viem";
 import { timeBankAbi } from "./abi";
 import type { Assertion } from "./passkey";
+import { DEPLOYED } from "./deployment";
 
-export const TIMEBANK = (import.meta.env.VITE_TIMEBANK_ADDRESS || "0x0000000000000000000000000000000000000000") as Hex;
+const chainId = Number(import.meta.env.VITE_CHAIN_ID || 10143);
+export const TIMEBANK = (DEPLOYED[chainId] || import.meta.env.VITE_TIMEBANK_ADDRESS || "0x0000000000000000000000000000000000000000") as Hex;
 export const EXPLORER = import.meta.env.VITE_EXPLORER_URL || "https://testnet.monadexplorer.com";
 
 const rpcUrl = import.meta.env.VITE_RPC_URL || "https://testnet-rpc.monad.xyz";
 
 export const chain = defineChain({
-  id: Number(import.meta.env.VITE_CHAIN_ID || 10143),
+  id: chainId,
   name: "Monad Testnet",
   nativeCurrency: { name: "MON", symbol: "MON", decimals: 18 },
   rpcUrls: { default: { http: [rpcUrl] } },
@@ -74,7 +76,21 @@ export function getCommunity(id: Hex) {
   return client.readContract({ ...contract, functionName: "certifiedCommunity", args: [id] });
 }
 
-type RelayFn = "register" | "seal" | "gift" | "donate" | "checkIn";
+export function dependentDigest(guardian: Hex) {
+  return client.readContract({ ...contract, functionName: "dependentDigest", args: [guardian] });
+}
+
+export function visitDigest(host: Hex, challenge: Hex) {
+  return client.readContract({ ...contract, functionName: "visitDigest", args: [host, challenge] });
+}
+
+export function getGuardian(id: Hex) {
+  return client.readContract({ ...contract, functionName: "guardianOf", args: [id] });
+}
+
+export const hasGuardian = (g: Hex) => BigInt(g) !== 0n;
+
+type RelayFn = "register" | "seal" | "gift" | "donate" | "checkIn" | "registerDependent" | "sealByGuardian" | "visit";
 
 export async function relay(fn: RelayFn, args: unknown[]): Promise<{ hash: Hex }> {
   const res = await fetch("/api/relay", {
@@ -98,4 +114,11 @@ export async function findCheckIn(challenge: Hex, fromBlock: bigint) {
     fromBlock,
   });
   return logs[0]?.args;
+}
+
+/** Recent verified visitors at the doors of the given members (for their guardian). */
+export async function findVisits(hosts: Hex[], fromBlock: bigint) {
+  if (!hosts.length) return [];
+  const logs = await client.getContractEvents({ ...contract, eventName: "Visited", args: { host: hosts }, fromBlock });
+  return logs.map((l) => ({ host: l.args.host!, visitor: l.args.visitor!, community: l.args.community!, block: l.blockNumber }));
 }

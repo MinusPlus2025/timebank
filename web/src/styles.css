@@ -1568,3 +1568,114 @@ body {
   grid-template-columns: repeat(2, 1fr);
   border-radius: 28px;
 }
+
+/* ---------- simple (elder) mode ---------- */
+.elder-home {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 24px 16px 48px;
+  display: grid;
+  gap: 20px;
+}
+.elder-home h1 {
+  margin: 8px 0 0;
+  font-size: 1.6em;
+}
+.elder-balance {
+  margin: 0;
+  display: grid;
+  gap: 4px;
+}
+.elder-balance span {
+  color: var(--ink-soft);
+}
+.elder-balance strong {
+  font-size: 2.4em;
+  line-height: 1.1;
+}
+.elder-buttons {
+  display: grid;
+  gap: 14px;
+}
+.elder-btn {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-height: 104px;
+  padding: 12px 22px 12px 12px;
+  border: none;
+  border-radius: 28px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-size: 1.25em;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+.elder-btn:first-child {
+  background: var(--glow);
+  color: #2b2f33;
+}
+.elder-btn-art {
+  width: 80px;
+  flex: none;
+  border-radius: 20px;
+  overflow: hidden;
+}
+
+/* ---------- family / guardian ---------- */
+.visit-notice {
+  margin: 14px 0 0;
+}
+.family-list {
+  list-style: none;
+  margin: 8px 0 20px;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+.family-list li {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px;
+  border-radius: 22px;
+  background: var(--paper);
+}
+.family-art {
+  width: 64px;
+  flex: none;
+  border-radius: 16px;
+  overflow: hidden;
+}
+.family-name {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+}
+.family-name small {
+  color: var(--ink-soft);
+}
+.family-actions {
+  display: grid;
+  justify-items: end;
+}
+.family-card h2 {
+  font-size: 1.6em;
+  margin: 0 0 8px;
+}
+@media print {
+  .topbar,
+  .no-print,
+  .screen-head button {
+    display: none !important;
+  }
+}
+.sky-meta > span:first-child {
+  white-space: nowrap;
+}
+.sky-links {
+  display: flex;
+  gap: 14px;
+}
