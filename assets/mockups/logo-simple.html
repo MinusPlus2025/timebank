@@ -1,0 +1,52 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="fonts.css"><style>
+body{margin:0;width:1200px;background:#f4efe6;font-family:"LXGW WenKai",Fraunces,serif;color:#1f2a24;padding:40px 40px 20px;box-sizing:border-box}
+h1{font-size:28px;margin:0 0 6px}p.sub{margin:0 0 28px;color:#6b6358;font-size:16px}
+.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:28px}
+.card{background:#fffdf8;border-radius:28px;padding:28px;display:flex;gap:28px;align-items:center;box-shadow:0 2px 0 #e6dccb}
+.big svg{width:200px;height:200px;display:block}
+.info h2{margin:0;font-size:26px}.info .en{font-family:Fraunces;font-style:italic;color:#6b6358;font-size:16px;margin:2px 0 10px}
+.info .why{font-size:15px;line-height:1.6;color:#3c3832;max-width:330px}
+.sizes{display:flex;gap:14px;align-items:flex-end;margin-top:14px}
+.sizes svg{display:block}.sizes span{font-size:11px;color:#8a8070;display:block;text-align:center;font-family:Plex}
+.word{display:flex;align-items:center;gap:10px;margin-top:14px;font-size:20px;font-weight:700}
+.word small{font-family:Fraunces;font-weight:400;font-size:18px;color:#3c3832}
+</style></head><body>
+<h1>时间银行 Logo · 极简方案</h1><p class="sub">要求：不复杂、好识别、独特、好记好传播。每个方案附 64 / 40 / 24 像素的小图标效果。</p>
+<div class="grid" id="g"></div>
+<script>
+const G='#3E8A5E',P='#F6D3DC',A='#FFC870',I='#28326B',D='#1F4A33';
+const marks={
+A:{name:'沙漏窗',en:'The Hourglass Window',why:'两扇窗上下相连，组成一个沙漏；一滴光从上面那户流到下面那户。时间、邻里、给予，一个图形讲完。',
+svg:(bg)=>`<rect width="100" height="100" rx="24" fill="${bg}"/>
+<path d="M28 18 H72 V30 Q72 44 54 50 Q72 56 72 70 V82 H28 V70 Q28 56 46 50 Q28 44 28 30Z" fill="${P}" stroke="${D}" stroke-width="5" stroke-linejoin="round"/>
+<path d="M50 20 V46 M30 31 H70" stroke="${D}" stroke-width="4"/>
+<path d="M32 33 H48 V44 Q40 42 34 37Z" fill="${A}"/>
+<circle cx="50" cy="56" r="3.6" fill="${A}" stroke="${D}" stroke-width="1.5"/>
+<path d="M31 80 V72 Q31 64 44 61 L56 61 Q69 64 69 72 V80Z" fill="${A}"/>
+<path d="M28 82 H72" stroke="${D}" stroke-width="5" stroke-linecap="round"/><path d="M28 18 H72" stroke="${D}" stroke-width="5" stroke-linecap="round"/>`},
+B:{name:'钟之窗',en:'The Clock Window',why:'一扇窗，十字窗框转成了钟的指针。“窗 = 邻居，指针 = 时间”。最简单，几笔就能画出来，容易传播。',
+svg:(bg)=>`<rect width="100" height="100" rx="24" fill="${bg}"/>
+<rect x="22" y="22" width="56" height="56" rx="10" fill="${P}" stroke="${D}" stroke-width="5"/>
+<path d="M52 52 L52 74 A22 22 0 0 0 74 52Z" fill="${A}" opacity=".95"/>
+<path d="M50 50 L50 30 M50 50 L64 58" stroke="${D}" stroke-width="5.5" stroke-linecap="round"/>
+<circle cx="50" cy="50" r="4" fill="${D}"/>`},
+C:{name:'一盏灯',en:'Two Windows, One Light',why:'两扇窗斜着相接，相接的那一格亮着。“两个人一起盖印，才点亮一盏灯”。几何感强，独特。',
+svg:(bg)=>`<rect width="100" height="100" rx="24" fill="${bg}"/>
+<rect x="18" y="18" width="40" height="40" rx="6" fill="${P}" stroke="${D}" stroke-width="5"/>
+<rect x="42" y="42" width="40" height="40" rx="6" fill="${P}" stroke="${D}" stroke-width="5"/>
+<rect x="42" y="42" width="16" height="16" fill="${A}"/>
+<path d="M42 42 h16 v16 h-16z" fill="none" stroke="${D}" stroke-width="5" stroke-linejoin="round"/>`},
+D:{name:'窗中日月',en:'Day & Night Window',why:'一扇拱形窗，左半是白天的绿，右半是夜里亮着的灯，对应 App 的昼夜切换。拱窗轮廓独特，全世界都认得是“窗/家”。',
+svg:(bg)=>`<rect width="100" height="100" rx="24" fill="${bg}"/>
+<path d="M26 80 V46 A24 24 0 0 1 74 46 V80Z" fill="${P}"/>
+<path d="M50 22 A24 24 0 0 1 74 46 V80 H50Z" fill="${I}"/>
+<path d="M54 50 h16 v26 h-16z" fill="${A}"/>
+<path d="M26 80 V46 A24 24 0 0 1 74 46 V80Z M50 22 V80 M26 50 H74" fill="none" stroke="${D}" stroke-width="5" stroke-linejoin="round"/>
+<path d="M20 80 H80" stroke="${D}" stroke-width="5" stroke-linecap="round"/>`}};
+const g=document.getElementById('g');
+for(const [k,m] of Object.entries(marks)){
+ const mk=(s,bg)=>`<svg width="${s}" height="${s}" viewBox="0 0 100 100">${m.svg(bg)}</svg>`;
+ g.innerHTML+=`<div class="card"><div class="big">${mk(200,'#EAF3EC')}</div><div class="info"><h2>${k} · ${m.name}</h2><div class="en">${m.en}</div><div class="why">${m.why}</div>
+ <div class="sizes"><div>${mk(64,'#EAF3EC')}<span>64</span></div><div>${mk(40,'#EAF3EC')}<span>40</span></div><div>${mk(24,'#EAF3EC')}<span>24</span></div><div>${mk(40,I)}<span>dark</span></div></div>
+ <div class="word">${mk(32,'#EAF3EC')}时间银行<small>TimeBank</small></div></div></div>`}
+</script></body></html>
