@@ -4,7 +4,10 @@
 // 3 fixing a lamp · 4 tea, one neighbour in a wheelchair · 5 grandmother with a cat (family)
 // 6 young person waving (you) · 7 empty window, plant (dark at night) · 8 empty window (dark)
 import type { CSSProperties, ReactNode } from "react";
-import type { Phase } from "./theme";
+import { illustrationPack, type Phase } from "./theme";
+
+const pack = illustrationPack();
+const sheet = (phase: Phase) => (pack === "global" ? `/img/windows-${phase}-sheet.webp` : `/img/windows-${pack}-${phase}-sheet.webp`);
 
 export const TILE = { you: 6, family: 5, unlit: [7, 8] } as const;
 
@@ -31,7 +34,7 @@ export function WindowTile({
     <span
       className={`tile ${lit ? "lit" : "unlit"} ${fresh ? "fresh" : ""}`}
       style={{
-        backgroundImage: `url(/img/windows-${phase}-sheet.webp)`,
+        backgroundImage: `url(${sheet(phase)})`,
         backgroundPosition: `${col * 50}% ${row * 50}%`,
         ...style,
       }}

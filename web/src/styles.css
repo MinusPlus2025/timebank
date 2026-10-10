@@ -1,31 +1,33 @@
 /* Neighbourhood windows. Day: green wall, pink rooms. Night: indigo wall, amber light.
    Colours are sampled from the illustration sheets so tiles blend into the wall. */
 :root {
-  --wall: #4c976c;
-  --sky: #f7cfd7;
-  --ink: #1f4a33;
-  --ink-soft: #3c6a52;
-  --paper: #fffaf3;
-  --paper-2: #f6efe4;
-  --on-wall: #fffaf3;
-  --glow: #ffc870;
-  --line: #e7dccd;
-  --warn: #fbefd9;
-  --ok: #e3f1e6;
+  /* Calm palette: warm paper, charcoal ink, one accent (lamp light). */
+  --wall: #f5f1ea;
+  --sky: #f5f1ea;
+  --ink: #2b2f33;
+  --ink-soft: #6b6f73;
+  --paper: #fbf9f5;
+  --paper-2: #efe9df;
+  --on-wall: #2b2f33;
+  --glow: #e9a23b;
+  --line: #e2dbcf;
+  --warn: #f6ecd8;
+  --ok: #e6eee4;
   --base: 18px;
   color-scheme: light;
 }
 :root[data-phase="night"] {
-  --wall: #2e376e;
-  --sky: #222a5c;
-  --ink: #f3eedf;
-  --ink-soft: #c9c6e6;
-  --paper: #1d2453;
-  --paper-2: #262e63;
-  --on-wall: #f3eedf;
-  --line: #3a4380;
-  --warn: #3a3420;
-  --ok: #24395a;
+  --wall: #1e232b;
+  --sky: #1e232b;
+  --ink: #ece7dd;
+  --ink-soft: #a9a59d;
+  --paper: #1e232b;
+  --paper-2: #272d37;
+  --on-wall: #ece7dd;
+  --glow: #f2c46d;
+  --line: #343b47;
+  --warn: #3a3324;
+  --ok: #26332b;
   color-scheme: dark;
 }
 :root[data-big="1"] {
@@ -42,12 +44,12 @@ body {
   color: var(--ink);
   font-size: var(--base);
   line-height: 1.6;
-  font-family: "Nunito", "PingFang SC", "HarmonyOS Sans SC", "MiSans", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "PingFang SC", "HarmonyOS Sans SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
   -webkit-text-size-adjust: 100%;
 }
 html:lang(zh) body {
-  font-family: "PingFang SC", "HarmonyOS Sans SC", "MiSans", "Noto Sans SC", "Nunito", "Microsoft YaHei", system-ui, sans-serif;
-  letter-spacing: 0.01em;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "HarmonyOS Sans SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+  letter-spacing: 0.02em;
 }
 .wordmark,
 .wordmark * {
@@ -1021,5 +1023,191 @@ input:focus-visible {
   }
   100% {
     box-shadow: inset 0 0 0 0 transparent;
+  }
+}
+
+
+/* ---------- calm overrides (v3) ---------- */
+body {
+  background: var(--sky);
+  -webkit-font-smoothing: antialiased;
+}
+.topbar {
+  background: color-mix(in srgb, var(--sky) 94%, transparent);
+  border-bottom: 1px solid var(--line);
+}
+.brand-mini,
+:root[data-phase="day"] .brand-mini,
+:root[data-phase="day"] .sky {
+  color: var(--ink);
+}
+.chip {
+  font-weight: 500;
+  border-color: var(--line);
+  color: var(--ink-soft);
+}
+.chip[aria-pressed="true"] {
+  color: var(--ink);
+  border-color: var(--ink-soft);
+}
+.home {
+  background: var(--sky);
+}
+.sky {
+  background: transparent !important;
+  padding: 28px 24px 8px;
+}
+.greeting {
+  color: var(--ink-soft);
+  opacity: 1;
+  font-size: 0.9rem;
+}
+.headline {
+  margin-top: 6px;
+}
+.headline b {
+  font-family: inherit;
+  font-weight: 600;
+  font-size: 3.2rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+.headline span {
+  font-weight: 500;
+  font-size: 1rem;
+}
+.headline small {
+  color: var(--ink-soft);
+  opacity: 1;
+}
+.sky-meta {
+  color: var(--ink-soft);
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+  margin-top: 18px;
+}
+.sky-meta strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+.facade {
+  margin: 20px 16px 0;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  overflow: hidden;
+  background: var(--wall);
+  padding-bottom: 12px;
+}
+.cornice,
+:root[data-phase="day"] .cornice,
+:root[data-phase="night"] .cornice {
+  height: 10px;
+  margin: 0 0 8px;
+  border-top: 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--paper-2);
+}
+.facade-grid {
+  gap: 2px 14px;
+  padding: 8px 18px 0;
+}
+.dock {
+  background: color-mix(in srgb, var(--paper) 94%, transparent);
+  border: 1px solid var(--line);
+  box-shadow: 0 12px 32px -20px rgba(0, 0, 0, 0.35);
+}
+.dock-btn {
+  min-height: 52px;
+  border-radius: 999px;
+  border-color: var(--line);
+  font-weight: 600;
+}
+.primary,
+.secondary {
+  min-height: 54px;
+  border-radius: 999px;
+  font-weight: 600;
+}
+.secondary {
+  border-color: var(--line);
+}
+h1 {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+h2 {
+  font-weight: 600;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+}
+.sheet {
+  border-color: var(--line);
+  border-radius: 24px;
+  box-shadow: 0 1px 0 var(--line);
+}
+.category {
+  background: var(--wall);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  font-weight: 500;
+}
+.category.on {
+  border-color: var(--glow);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--glow) 25%, transparent);
+}
+.choice {
+  border-radius: 999px;
+  font-weight: 500;
+  border-color: var(--line);
+  background: transparent;
+}
+.choice.on {
+  background: var(--ink);
+  color: var(--paper);
+  border-color: var(--ink);
+}
+.garland-scene,
+.plane-scene {
+  background: var(--wall);
+  border: 1px solid var(--line);
+}
+.garland-wire,
+.plane-path {
+  stroke: var(--ink-soft);
+}
+.bulb {
+  fill: var(--line);
+}
+.door-scene {
+  border-color: var(--line);
+  background: var(--paper-2);
+}
+.door-light {
+  background: radial-gradient(circle at 50% 60%, #fff6e0, #f6d79a 75%);
+}
+.door-panel {
+  background: var(--paper-2);
+  box-shadow: inset 0 0 0 1px var(--line), inset 0 0 0 10px var(--paper-2), inset 0 0 0 11px var(--line);
+}
+.welcome-window,
+.person-window,
+.gift-head,
+.sheet.center .tile-wrap,
+.window-detail .tile-wrap,
+.qr-badge {
+  background: var(--wall);
+  border: 1px solid var(--line);
+}
+.onb-art {
+  margin: 12px 16px 0;
+  border-radius: 24px;
+}
+@media (min-width: 900px) {
+  .facade {
+    margin: 0;
+    box-shadow: 0 30px 60px -45px rgba(0, 0, 0, 0.35);
+  }
+  .headline b {
+    font-size: 4rem;
   }
 }
