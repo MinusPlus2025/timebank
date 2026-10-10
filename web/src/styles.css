@@ -1684,3 +1684,18 @@ body {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
+.voice-hint {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  z-index: 50;
+  max-width: 520px;
+  margin: 0 auto;
+  padding: 14px 18px;
+  border-radius: 18px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 0.95rem;
+  line-height: 1.5;
+}

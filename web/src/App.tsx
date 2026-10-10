@@ -11,7 +11,7 @@ import { usePhase, type Phase } from "./theme";
 import { Wordmark } from "./Brand";
 import { CountUp, Door, Facade, Garland, PaperPlane, TILE, WindowTile, spring } from "./Windows";
 import { Onboarding } from "./Onboarding";
-import { configureVoice, speak, unlockVoice, useSpeakOnShow, voiceSupported } from "./voice";
+import { configureVoice, speak, speakFromTap, useSpeakOnShow, voiceSupported } from "./voice";
 
 // ---------- routing & app state ----------
 
@@ -1047,6 +1047,11 @@ export default function App() {
     setMeState(m);
   };
   const ctx: Ctx = { s, lang, phase, me, setMe, elder: big };
+  const [voiceHint, setVoiceHint] = useState(false);
+  const showVoiceHint = () => {
+    setVoiceHint(true);
+    setTimeout(() => setVoiceHint(false), 7000);
+  };
 
   const [page, arg, arg2] = route;
   let body;
@@ -1087,8 +1092,8 @@ export default function App() {
                 writePref("timebank.voice", next ? "1" : "0");
                 configureVoice(next, lang);
                 if (next) {
-                  unlockVoice();
-                  speak(s.voiceOn);
+                  speakFromTap(s.voiceOn);
+                  showVoiceHint();
                 }
               }}
             >
@@ -1107,8 +1112,9 @@ export default function App() {
                 setVoice(true);
                 writePref("timebank.voice", "1");
                 configureVoice(true, lang);
-                unlockVoice();
-                speak(s.voiceOn);
+                // Short, because the simple home screen reads its own guidance right after.
+                speakFromTap(s.elderMode);
+                showVoiceHint();
               }
             }}
           >
@@ -1132,6 +1138,13 @@ export default function App() {
           </motion.div>
         </AnimatePresence>
       </MotionConfig>
+      <AnimatePresence>
+        {voiceHint && (
+          <motion.p className="voice-hint" role="status" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} onClick={() => setVoiceHint(false)}>
+            {s.voiceHint}
+          </motion.p>
+        )}
+      </AnimatePresence>
       <div id="live-region" className="sr-only" aria-live="polite" />
     </>
   );
