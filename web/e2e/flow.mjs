@@ -74,8 +74,8 @@ async function register(p) {
 const balance = async (p) => {
   await p.page.goto(BASE + "#/");
   await p.page.reload();
-  await p.page.waitForFunction(() => !document.querySelector(".dock-balance b")?.textContent?.includes("…"));
-  return p.page.textContent(".dock-balance b");
+  await p.page.waitForFunction(() => !document.querySelector(".sky-meta strong")?.textContent?.includes("…"));
+  return p.page.textContent(".sky-meta strong");
 };
 
 async function thankAndSeal(receiver, helper, helperId, { category, minutesLabel, pay }) {
@@ -156,6 +156,12 @@ await wang.page.getByRole("button", { name: "EN" }).click();
 await wang.page.waitForSelector(".facade-grid .tile-button");
 await wang.page.waitForTimeout(800);
 await shot(wang, "10-home-en");
+
+// 6. Web layout on a laptop-sized screen.
+await wang.page.getByRole("button", { name: "中文" }).click();
+await wang.page.setViewportSize({ width: 1440, height: 900 });
+await wang.page.waitForTimeout(900);
+if (SHOTS) await wang.page.screenshot({ path: `${SHOTS}/11-desktop.png` });
 
 await browser.close();
 console.log("E2E OK");

@@ -159,7 +159,8 @@ function Home({ s, lang, phase, me }: Ctx & { me: Me }) {
   }, [me.id]);
 
   const given = seals.filter((x) => x.helper === me.id).reduce((sum, x) => sum + x.minutes, 0);
-  const total = Math.max(9, Math.ceil((seals.length + 1) / 3) * 3);
+  // A multiple of 4 fills both the 2-column phone layout and the 4-column desktop layout.
+  const total = Math.max(8, Math.ceil((seals.length + 1) / 4) * 4);
   const unlit = total - seals.length - 1;
 
   return (
@@ -176,6 +177,18 @@ function Home({ s, lang, phase, me }: Ctx & { me: Me }) {
             <small>{s.litSub}</small>
           </span>
         </div>
+        <div className="sky-meta">
+          <span>
+            {s.available} <strong>{member ? formatMinutes(member.balance, s) : "…"}</strong>
+          </span>
+          {!!member?.balance && (
+            <button className="link" onClick={() => go("/donate")}>{s.donate}</button>
+          )}
+        </div>
+        <nav className="dock">
+          <button className="dock-btn main" onClick={() => go("/code")}>{s.myCode}</button>
+          <button className="dock-btn" onClick={() => go("/door")}>{s.door}</button>
+        </nav>
       </header>
       <Facade>
         <WindowTile phase={phase} tile={TILE.you} label={s.yourWindow} onClick={() => go("/code")} />
@@ -192,15 +205,6 @@ function Home({ s, lang, phase, me }: Ctx & { me: Me }) {
           <WindowTile key={`u${i}`} phase={phase} tile={TILE.unlit[i % 2]} lit={false} />
         ))}
       </Facade>
-      <nav className="dock">
-        <div className="dock-balance">
-          <small>{s.available}</small>
-          <b>{member ? formatMinutes(member.balance, s) : "…"}</b>
-        </div>
-        <button className="dock-btn main" onClick={() => go("/code")}>{s.myCode}</button>
-        <button className="dock-btn" onClick={() => go("/door")}>{s.door}</button>
-        <button className="dock-btn" onClick={() => go("/donate")} disabled={!member?.balance}>{s.donate}</button>
-      </nav>
       {open && (
         <div className="overlay" onClick={() => setOpen(null)}>
           <div className="sheet window-detail" onClick={(e) => e.stopPropagation()}>
