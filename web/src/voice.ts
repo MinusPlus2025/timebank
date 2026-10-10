@@ -8,6 +8,14 @@ import type { Lang } from "./i18n";
 let enabled = false;
 let lang: Lang = "zh";
 
+/** Must run inside a tap: iOS only allows speech after the user has started it once. */
+export function unlockVoice() {
+  if (!voiceSupported()) return;
+  const u = new SpeechSynthesisUtterance(" ");
+  u.volume = 0;
+  window.speechSynthesis.speak(u);
+}
+
 export function configureVoice(on: boolean, l: Lang) {
   enabled = on;
   lang = l;
@@ -20,7 +28,15 @@ export function speak(text: string) {
   announce(text);
   if (!enabled || !voiceSupported()) return;
   const synth = window.speechSynthesis;
-  synth.cancel();
+  // iOS Safari drops an utterance queued right after cancel(), so give it a moment.
+  if (synth.speaking || synth.pending) {
+    synth.cancel();
+    setTimeout(() => say(text), 120);
+  } else say(text);
+}
+
+function say(text: string) {
+  const synth = window.speechSynthesis;
   const u = new SpeechSynthesisUtterance(text);
   u.lang = lang === "zh" ? "zh-CN" : "en-US";
   u.rate = 0.92; // a little slower than default, easier for older listeners

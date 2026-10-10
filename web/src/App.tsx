@@ -11,7 +11,7 @@ import { usePhase, type Phase } from "./theme";
 import { Wordmark } from "./Brand";
 import { CountUp, Door, Facade, Garland, PaperPlane, TILE, WindowTile, spring } from "./Windows";
 import { Onboarding } from "./Onboarding";
-import { configureVoice, speak, useSpeakOnShow, voiceSupported } from "./voice";
+import { configureVoice, speak, unlockVoice, useSpeakOnShow, voiceSupported } from "./voice";
 
 // ---------- routing & app state ----------
 
@@ -312,7 +312,14 @@ function ScanHelp({ s, phase }: Ctx) {
   );
 }
 
-function Person({ s, phase, id }: Ctx & { id: Hex }) {
+function Person({ s, phase, me, id }: Ctx & { id: Hex }) {
+  if (me && me.id === id)
+    return (
+      <Screen s={s} title={s.scanTitle} onBack={() => go("/")}>
+        <div className="person-window"><WindowTile phase={phase} tile={TILE.you} /></div>
+        <p className="instruction">{s.ownCode}</p>
+      </Screen>
+    );
   return (
     <Screen s={s} title={`${s.someone} ${shortId(id)}`} onBack={() => go("/")}>
       <div className="person-window"><WindowTile phase={phase} tile={TILE.unlit[0]} lit={false} /></div>
@@ -324,17 +331,22 @@ function Person({ s, phase, id }: Ctx & { id: Hex }) {
   );
 }
 
+let choiceGroup = 0;
 function Choice({ options, value, onChange, render }: { options: readonly number[]; value: number; onChange: (v: number) => void; render: (v: number) => string }) {
+  const [group] = useState(() => `choice-${choiceGroup++}`);
   return (
     <div className="choices" role="radiogroup">
       {options.map((o) => (
-        <button key={o} role="radio" aria-checked={o === value} className={o === value ? "choice on" : "choice"} onClick={() => onChange(o)}>
-          {render(o)}
-        </button>
+        <motion.button key={o} role="radio" aria-checked={o === value} className={o === value ? "choice on" : "choice"} onClick={() => onChange(o)} whileTap={{ scale: 0.95 }}>
+          {o === value && <motion.span layoutId={group} className="choice-pill" transition={spring} />}
+          <span className="choice-label">{render(o)}</span>
+        </motion.button>
       ))}
     </div>
   );
 }
+
+const shortMinutes = (m: number, s: Strings) => (m % 60 === 0 || m < 60 ? formatMinutes(m, s) : `${(m / 60).toFixed(1)} ${s.hoursUnit}`);
 
 function Thank({ s, lang, phase, me, helper }: Ctx & { me: Me; helper: Hex }) {
   const [category, setCategory] = useState(1);
@@ -375,14 +387,22 @@ function Thank({ s, lang, phase, me, helper }: Ctx & { me: Me; helper: Hex }) {
       <h2>{s.whatHelp}</h2>
       <div className="categories">
         {CATEGORIES.map((c) => (
-          <button key={c.id} className={c.id === category ? "category on" : "category"} aria-pressed={c.id === category} onClick={() => setCategory(c.id)}>
+          <motion.button
+            key={c.id}
+            className={c.id === category ? "category on" : "category"}
+            aria-pressed={c.id === category}
+            onClick={() => setCategory(c.id)}
+            animate={{ scale: c.id === category ? 1.04 : 1, y: c.id === category ? -3 : 0 }}
+            whileTap={{ scale: 0.95 }}
+            transition={spring}
+          >
             <WindowTile phase={phase} tile={c.tile} />
             <span>{c[lang]}</span>
-          </button>
+          </motion.button>
         ))}
       </div>
       <h2>{s.howLong}</h2>
-      <Choice options={[30, 60, 90, 120]} value={minutes} onChange={setMinutes} render={(m) => formatMinutes(m, s)} />
+      <Choice options={[30, 60, 90, 120]} value={minutes} onChange={setMinutes} render={(m) => shortMinutes(m, s)} />
       <label className="toggle">
         <input type="checkbox" checked={redeem} disabled={balance < minutes} onChange={(e) => setRedeem(e.target.checked)} />
         <span>
@@ -405,6 +425,7 @@ function Confirm({ s, lang, phase, me, setMe, raw }: Ctx & { raw: string }) {
     }
   }, [raw]);
   const [done, setDone] = useState<Hex | null>(null);
+  const [seconds, setSeconds] = useState("");
   const { busy, error, run } = useAsync();
   useSpeakOnShow(p && (done ? `${s.sealed}。${s.sealedBody}` : `${s.confirmTitle}。${s.confirmBody(formatMinutes(p.m, s), (CATEGORIES.find((c) => c.id === p.c) ?? CATEGORIES[0])[lang])}`));
   if (!p) return <Screen s={s}><ErrorNote error="bad link" s={s} /></Screen>;
@@ -415,7 +436,9 @@ function Confirm({ s, lang, phase, me, setMe, raw }: Ctx & { raw: string }) {
       const digest = await chain.sealDigest(p.h, p.r, p.m, p.c, p.d);
       const helper = await signAs(digest, p.h);
       if (!me) setMe({ id: helper.id, x: helper.x, y: helper.y, name: "" });
+      const t0 = performance.now();
       const { hash } = await chain.relay("seal", [p.h, p.r, p.m, p.c, p.d, chain.toArgs(helper.assertion), chain.toArgs(p.a)]);
+      setSeconds(((performance.now() - t0) / 1000).toFixed(1));
       setDone(hash);
       setTimeout(stampFeedback, 900);
     });
@@ -426,8 +449,7 @@ function Confirm({ s, lang, phase, me, setMe, raw }: Ctx & { raw: string }) {
         <div className="center celebrate">
           <Garland phase={phase} left={TILE.you} right={cat.tile} />
           <h1>{s.sealed}</h1>
-          <p>{s.sealedBody}</p>
-          <a className="link" href={`${chain.EXPLORER}/tx/${done}`} target="_blank" rel="noreferrer">{s.onChain} ↗</a>
+          <Receipt s={s} hash={done} seconds={seconds} />
           <button className="secondary" onClick={() => go("/")}>{s.home}</button>
         </div>
       </Screen>
@@ -444,6 +466,23 @@ function Confirm({ s, lang, phase, me, setMe, raw }: Ctx & { raw: string }) {
         {error && <ErrorNote error={error === "wrong-person" ? s.wrongPerson : error} s={s} />}
       </div>
     </Screen>
+  );
+}
+
+function Receipt({ s, hash, seconds }: { s: Strings; hash: Hex; seconds: string }) {
+  return (
+    <motion.div className="receipt" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ ...spring, delay: 1.4 }}>
+      <div className="receipt-head">
+        <span className="receipt-dot" aria-hidden />
+        <strong>{s.receiptTitle}</strong>
+        {seconds && <span className="receipt-time">{s.receiptTime(seconds)}</span>}
+      </div>
+      <p>{s.receiptSigned}</p>
+      <p className="muted small">{s.receiptWhy}</p>
+      <a className="receipt-tx" href={`${chain.EXPLORER}/tx/${hash}`} target="_blank" rel="noreferrer">
+        {s.receiptTx} {hash.slice(0, 10)}…{hash.slice(-6)} ↗
+      </a>
+    </motion.div>
   );
 }
 
@@ -486,7 +525,7 @@ function Gift({ s, phase, me, to }: Ctx & { me: Me; to: Hex }) {
       <p className="muted">{s.giftHint}</p>
       <p>{s.available}: <strong>{formatMinutes(balance, s)}</strong></p>
       <h2>{s.giftAmount}</h2>
-      <Choice options={[30, 60, 120, 300]} value={minutes} onChange={setMinutes} render={(m) => formatMinutes(m, s)} />
+      <Choice options={[30, 60, 120, 300]} value={minutes} onChange={setMinutes} render={(m) => shortMinutes(m, s)} />
       <button className="primary" disabled={busy || balance < minutes} onClick={send}>{balance < minutes ? s.notEnough : s.signGift}</button>
       {error && <ErrorNote error={error} s={s} />}
     </Screen>
@@ -521,7 +560,7 @@ function Donate({ s, me }: Ctx & { me: Me }) {
         <p className="note ok">{s.donated}</p>
       ) : (
         <>
-          <Choice options={[30, 60, 120]} value={minutes} onChange={setMinutes} render={(m) => formatMinutes(m, s)} />
+          <Choice options={[30, 60, 120]} value={minutes} onChange={setMinutes} render={(m) => shortMinutes(m, s)} />
           <button className="primary" disabled={busy || balance < minutes} onClick={give}>{balance < minutes ? s.notEnough : s.donate}</button>
         </>
       )}
@@ -666,7 +705,10 @@ export default function App() {
                 setVoice(next);
                 writePref("timebank.voice", next ? "1" : "0");
                 configureVoice(next, lang);
-                if (next) speak(s.voiceOn);
+                if (next) {
+                  unlockVoice();
+                  speak(s.voiceOn);
+                }
               }}
             >
               <span aria-hidden>{voice ? "🔊" : "🔈"}</span> {s.voice}
