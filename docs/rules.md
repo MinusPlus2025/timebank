@@ -2,53 +2,55 @@
 
 > 更新：2026-10-10
 > 来源等级：
-> - **[官方-中文]**：Monad 中文公众号文章《Monad Metropolis 全球黑客松正式开启》（2026-09-02，用户上传的 PDF）
-> - **[二手]**：第三方参赛仓库对官方 Rules 的转述，**官方 Rules 原文尚未看到**（monad.xyz 被当前云端环境的网络策略屏蔽）
+> - **[官方]**：Monad 官方渠道（官方中文公众号文章、hackathon.monad.xyz 公开页、Monad Devs 公开帖）
+> - **[参赛者]**：其他参赛项目在 GitHub 上引用的规则或提交清单（有交叉印证，但不是原文）
+> - **[二手]**：活动聚合页等单一来源
 >
-> 任何标 [二手] 的条目，提交前必须在 https://www.monad.xyz/metropolis 的 Rules & Guidelines 里亲自确认。
+> 官方 Portal（https://hackathon.monad.xyz ，用 GitHub 登录）里的 Rules、Submission、Bounties 原文**还没拿到**。拿到后用原文替换下面所有非 [官方] 条目。
 
-## FACT｜已确认（官方-中文）
-
-| 项目 | 内容 |
-|---|---|
-| 名称 | Monad Metropolis（Monad 年度旗舰黑客松） |
-| 形式 | 线上优先，全球开放；线下活动独立并行 |
-| 开发期 | 2026-09-01 – 2026-10-13 |
-| 提交截止 | 2026-10-13 |
-| 评审期 | 2026-10-14 – 2026-10-27 |
-| 获奖公布 | 2026-11-03 |
-| 总奖池 | 约 $250,000，包含主赛道奖金、Bounties 和 Credits |
-| 主赛道奖金 | 4 个赛道 × 3 名 × $10,000 |
-| 全场总冠军 | $30,000 |
-| 报名/官网 | monad.xyz/metropolis |
-| 参赛后台（用户提供） | https://hackathon.monad.xyz/dashboard （需要登录，Rules、提交表单和 Bounty 细则很可能都在这里） |
-
-### 四个赛道（官方描述原意）
-1. **链上金融与交易**：高速结算环境下的新资产原语、市场和交易基础设施。示例：预测市场、Exotic Options、RWA、参数化保险。
-2. **消费产品与支付**：让 Crypto 融入产品，而不是成为门槛。示例：社交支付、可编程礼物、工资流支付、微型保险。重点是“用户真正愿意用的体验”。
-3. **社交、注意力与文化**：开放社交图谱、Feed 算法、注意力市场、TCG、生成艺术。
-4. **信任、身份与 AI 基础设施**：Proof of Personhood、Content Passports、Data Lockers、Cross-app AI Memory。官方点名的 Monad 能力：**P256 / WebAuthn、ERC-8004、Encrypted Mempools**。目标是做能被其他应用复用的基础设施。
-
-### 官方给出的核心命题
-- “What becomes possible on Monad?”
-
-## [二手] 待官方确认的规则
-来源：github.com/precious-akpan/monad-metropolis-merchant-rails 的 README，转述官方 Rules 的章节号。
-
-| 规则 | 转述内容 | 对我们的影响 |
+## 基础信息
+| 项目 | 内容 | 来源 |
 |---|---|---|
-| 截止时间 | 2026-10-13 **11:59 PM ET**（§4.2），不接受迟交 | 约等于北京时间 **10-14 11:59** |
-| 编辑 | 截止前可以修改，截止时的版本参与评审 | 可以先提交占位版本，之后再更新 |
-| 主赛道评分（§5.2） | 5 项，各占 20%：产品质量与完成度、技术水平、Monad 集成、赛道契合与问题相关性、创新与影响 | 见 strategy.md 的评审假设 |
-| Bounty 评分 | 权重不同（40/30/20/10，具体维度未知） | |
-| Demo 视频 | **最长 3 分钟**（§4.1、§9.4），必须展示真实运行的产品和 Monad 链上交互，不能只放 mockup 或幻灯片 | |
-| 开源 | OSI 认可的开源协议，GitHub 公开（§7.2）。官网营销页写的是“鼓励但不强制”，两者有冲突 | 统一按开源处理 |
-| 网络 | testnet 或 mainnet 都可以（§9.2） | 默认用 testnet |
-| 团队 | 1–5 人（§2.4） | |
-| 赛道 | 每个项目只能报一个主赛道，同一项目不能拿多个主赛道奖（§2.5、§3.3） | 选赛道是战略决策 |
-| AI 工具 | 用了 AI 工具要在 README 里披露（§4.1.4） | README 要写披露 |
-| 已有代码 | 只能作为基础，且要在 README 里标明；大部分工作必须在开发期内完成，commit 历史要覆盖开发期 | 本仓库 2026-10-10 才创建，全部是新代码，没有问题 |
-| 奖池 | 有说法称基础奖池是 $145k，剩下的来自 Bounty | 官方中文文章说总冠军 $30k，另一处二手来源说 $25k，**有冲突** |
+| 名称 | Monad Metropolis Hackathon 2026 | 官方 |
+| 形式 | 全球线上；可以单人参赛或组队；不要求有 Monad / Web3 经验 | 官方 / Rise In |
+| 开发期 | 2026-09-01 – 2026-10-13 | 官方 |
+| **提交截止** | **2026-10-13 11:59 PM ET**（= 北京时间 **10-14 11:59**） | 官方（Monad Devs 公开帖） |
+| 评审期 | 2026-10-14 – 10-27 | 官方 |
+| 获奖公布 | 2026-11-03 | 官方 |
+| 总奖池 | $250,000+，包含主赛道奖金、Bounties 和 Credits | 官方 |
+| 主赛道 | 每个赛道 $30,000（3 × $10,000） | 官方 |
+| 总冠军 | **有冲突**：官方中文文章写 $30,000，多数公开来源写 $25,000 | 待 Portal 确认 |
+| Portal | https://hackathon.monad.xyz （用 GitHub 登录） | 官方 |
 
-## [二手] Sponsor（Bounty 细则未找到）
-Dynamic、Privy、Perpl、Nansen、Chainlink、Agora、Kuru、MetaMask、Alibaba Cloud、Kimi、Chainstack、Crouton Digital、Mercuryo 等。每个 Bounty 的具体要求**未知**。
+## 四个主赛道
+1. **Onchain Finance & Trading**：预测市场、Exotic Options、RWA、参数化保险、交易基础设施。
+2. **Consumer Products & Payments**：社交支付、工资流、可编程礼物、微型保险。口号是“crypto that doesn't feel like crypto”。
+3. **Social, Attention & Culture**：开放社交图谱、注意力市场、生成艺术、竞争型 Feed、TCG。
+4. **Trust, Identity & AI Infrastructure**：Proof of Personhood、Content Passports、Data Lockers、Cross-app AI Memory。官方点名的能力：P256 / WebAuthn、ERC-8004、Encrypted Mempools。
+
+## 提交要求（[参赛者]，多个项目交叉印证）
+- 在 Portal 里先创建 Team 和 Project，选**一个**主赛道，再勾选 Bounties
+- **Technical Demo 视频 ≤ 3 分钟**
+- **Pitch 视频 ≤ 2 分钟**（视频要求可能有两段，需确认）
+- 代码仓库要公开，**或者至少让 `metropolis@hackathon.monad.xyz` 能读取**（需确认是否允许保持私有、只邀请评审）
+- **原创性披露**（Rules §4.1 Clause 4，“Originality & Hackathon Build Window Disclosure”）：比赛前已有的 UI、代码、模块、产品、工具要逐项说明，标清楚哪些是比赛期间新做的
+- [二手] AI 工具使用需要在 README 披露；testnet / mainnet 都可以；团队 1–5 人
+- [二手] 评分标准：5 项各 20%（产品质量与完成度、技术水平、Monad 集成、赛道契合、创新与影响）。**最需要原文确认**
+
+## Sponsor Bounties（[官方] Monad Devs 公开帖，细则以 Portal 为准）
+| Sponsor | 奖励 | 要求 |
+|---|---|---|
+| Privy | $5,000 | 集成 Privy，而且**不能只用来登录**，要深入产品核心功能 |
+| Dynamic | $5,000 | 在已部署、可以演示的应用里集成 Dynamic SDK（登录 / 嵌入式钱包 / Agent 钱包 / 签名） |
+| Mera | $5,000（拆分未知） | 使用 Mera 的 passkey-only onboarding 库；有参赛者描述为“Best Mera-Powered UX on Monad” |
+| Kuru | $5,000 | 做一个聚焦的现货交易产品，交易走 Kuru 在 Monad 上的链上订单簿 |
+| Perpl | $5,000 + $3,000 | Best Use of Perpl's API；Best Analytics / Risk Tool |
+| MetaMask | $2,500 | 给 MetaMask Agent Wallet 写插件，提供新的交易能力 |
+| Kimi / Moonshot | $3,000 **credits** | 用 Kimi 驱动项目 |
+| Envio | $1,000 | 用 HyperIndex / HyperSync / HyperRPC 驱动 App 核心的链上数据功能 |
+| Alchemy | $1,000 credits | 能运行、部署在 Monad、有意义地使用至少一项 Alchemy 服务 |
+| Crouton Digital | $5,000 RPC credits | 不限赛道 |
+| Agora、Nansen、Chainlink、Alibaba Cloud / Qwen、Tencent Cloud、Cleanverse、Aurora、BlockVision 等 | 未知 | 未知，**不要猜** |
+
+## 官方信号
+- Monad Devs 提醒：先读 Resources、Bounties、Tracks；**不要重造已经存在的 Indexer、API、Intent、Identity、Payments 基础设施**，要在现有工具上做出独特的产品机制。

@@ -9,10 +9,15 @@
 4. **账户**：是否已经在 monad.xyz/metropolis 报名？提交平台是什么（Devpost / Rise In / 官方表单）？
 5. **环境**：有没有 Monad testnet 测试币和钱包？有没有 RPC（官方公共 RPC / Alchemy / QuickNode / Chainstack）？
 
+6a. **EchoPass**：这是你以前做的项目吗？做的是什么、用了什么技术？如果它有可以复用的部分（比如 Passkey、UI），复用时必须按 §4.1 Clause 4 披露。
+6b. Privy、Dynamic、Mera 三家钱包 SDK，你有没有用过哪一家？
+
 ## OPEN QUESTION｜需要核实的规则
 6. 官方 Rules 原文：评分标准是不是 5 × 20%？视频是不是最长 3 分钟？必须开源吗？截止时间是不是 11:59 PM ET？（官方后台 https://hackathon.monad.xyz/dashboard 需要登录，而且当前云端环境的网络策略屏蔽了 monad.xyz 的所有域名。需要你登录后把 Rules、提交表单字段和 Bounty 列表截图或复制给我）
-7. 总冠军奖金是 $30k（官方中文文章）还是 $25k（二手来源）？
-8. 各 Sponsor Bounty 的要求和金额，特别是 Privy、Dynamic、MetaMask、Chainlink、Agora、Kimi、Alibaba Cloud。
+7. 总冠军奖金是 $30k（官方中文文章）还是 $25k（多数来源）？
+7a. 是要两段视频（Demo ≤3 分钟 + Pitch ≤2 分钟）吗？
+7b. 仓库能不能保持私有、只给 metropolis@hackathon.monad.xyz 读权限？
+8. Bounty 的完整评审条件，特别是 Privy / Dynamic / Mera（候选组合）；以及 Agora、Nansen、Chainlink、Alibaba Cloud 等未知 Bounty。
 9. Bounty 能否和主赛道同时获奖？一个项目能报几个 Bounty？
 
 ## ASSUMPTION｜未验证的技术假设（实现前要对照 docs.monad.xyz）
