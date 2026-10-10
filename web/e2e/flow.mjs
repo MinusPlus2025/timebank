@@ -135,7 +135,7 @@ await shot(wang, "02b-window-open");
 await wang.page.click(".window-detail .secondary");
 
 // 4. Door check: the steward certifies 小赵, then 妈妈 checks him at the door.
-execSync(`npx hardhat run scripts/certify.js --network localhost`, {
+execSync(`npx hardhat run scripts/certify.js --network ${process.env.CERTIFY_NETWORK || "localhost"}`, {
   cwd: new URL("../../contracts", import.meta.url).pathname,
   env: { ...process.env, MEMBER_ID: zhaoId, COMMUNITY: "阳光社区" },
   stdio: "inherit",

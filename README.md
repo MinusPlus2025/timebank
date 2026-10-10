@@ -4,7 +4,7 @@
 
 AI can do things for you. It can't be there for you. TimeBank records time that neighbours give each other. Every hour is sealed in person by **two passkeys** (Face ID / fingerprint) and verified on **Monad** with its native P256 precompile, so the record outlives any operator.
 
-Monad Metropolis 2026 · Track: Trust, Identity & AI Infrastructure
+Monad Metropolis 2026 · Track: Trust, Identity & AI Infrastructure · **Live: https://monad-metropolis-2026.vercel.app/**
 
 | Day | Night | A window opens | Seal: lights between two windows | Door check |
 |---|---|---|---|---|
