@@ -4,6 +4,18 @@ const { Passkey } = require("./passkey");
 
 const CARE = 1;
 const REPAIR = 2;
+const FAR = 4102444800n; // year 2100: a deadline that never bites unless a test wants it to
+
+const req = (helper, receiver, minutes_, category, redeem, extra = {}) => ({
+  helper,
+  receiver,
+  minutes_,
+  category,
+  redeem,
+  visitId: ethers.ZeroHash,
+  deadline: FAR,
+  ...extra,
+});
 
 describe("TimeBank", () => {
   let bank, steward, other;
@@ -15,9 +27,10 @@ describe("TimeBank", () => {
     return bank.memberId(pk.x, pk.y);
   }
 
-  async function sealHelp(helperPk, helperId, receiverPk, receiverId, minutes, category, redeem) {
-    const digest = await bank.sealDigest(helperId, receiverId, minutes, category, redeem);
-    return bank.seal(helperId, receiverId, minutes, category, redeem, helperPk.sign(digest), receiverPk.sign(digest));
+  async function sealHelp(helperPk, helperId, receiverPk, receiverId, minutes, category, redeem, extra) {
+    const q = req(helperId, receiverId, minutes, category, redeem, extra);
+    const digest = await bank.sealDigest(q);
+    return bank.seal(q, helperPk.sign(digest), receiverPk.sign(digest));
   }
 
   beforeEach(async () => {
@@ -47,10 +60,10 @@ describe("TimeBank", () => {
     });
 
     it("rejects a seal signed by only one side", async () => {
-      const digest = await bank.sealDigest(aliceId, bobId, 60, REPAIR, false);
+      const digest = await bank.sealDigest(req(aliceId, bobId, 60, REPAIR, false));
       const stranger = new Passkey();
       await expect(
-        bank.seal(aliceId, bobId, 60, REPAIR, false, alice.sign(digest), stranger.sign(digest))
+        bank.seal(req(aliceId, bobId, 60, REPAIR, false), alice.sign(digest), stranger.sign(digest))
       ).to.be.revertedWithCustomError(bank, "BadSignature").withArgs(bobId);
     });
 
@@ -63,20 +76,20 @@ describe("TimeBank", () => {
     });
 
     it("rejects replaying the same signatures", async () => {
-      const digest = await bank.sealDigest(aliceId, bobId, 60, REPAIR, false);
+      const digest = await bank.sealDigest(req(aliceId, bobId, 60, REPAIR, false));
       const a = alice.sign(digest);
       const b = bob.sign(digest);
-      await bank.seal(aliceId, bobId, 60, REPAIR, false, a, b);
-      await expect(bank.seal(aliceId, bobId, 60, REPAIR, false, a, b)).to.be.revertedWithCustomError(
+      await bank.seal(req(aliceId, bobId, 60, REPAIR, false), a, b);
+      await expect(bank.seal(req(aliceId, bobId, 60, REPAIR, false), a, b)).to.be.revertedWithCustomError(
         bank,
         "BadSignature"
       );
     });
 
     it("rejects signatures over different minutes", async () => {
-      const digest = await bank.sealDigest(aliceId, bobId, 60, REPAIR, false);
+      const digest = await bank.sealDigest(req(aliceId, bobId, 60, REPAIR, false));
       await expect(
-        bank.seal(aliceId, bobId, 480, REPAIR, false, alice.sign(digest), bob.sign(digest))
+        bank.seal(req(aliceId, bobId, 480, REPAIR, false), alice.sign(digest), bob.sign(digest))
       ).to.be.revertedWithCustomError(bank, "BadSignature");
     });
 
@@ -212,8 +225,8 @@ describe("TimeBank", () => {
     }
 
     async function sealForDependent(helperPk, helperId, depId, guardianPk, minutes, redeem) {
-      const digest = await bank.sealDigest(helperId, depId, minutes, CARE, redeem);
-      return bank.sealByGuardian(helperId, depId, minutes, CARE, redeem, helperPk.sign(digest), guardianPk.sign(digest));
+      const digest = await bank.sealDigest(req(helperId, depId, minutes, CARE, redeem));
+      return bank.sealByGuardian(req(helperId, depId, minutes, CARE, redeem), helperPk.sign(digest), guardianPk.sign(digest));
     }
 
     it("lets a daughter open an account for a parent without a phone and confirm help for them", async () => {
@@ -257,20 +270,80 @@ describe("TimeBank", () => {
         .to.be.revertedWithCustomError(bank, "BadSignature");
       await expect(bank.connect(other).appointGuardian(momId, bobId)).to.be.revertedWithCustomError(bank, "NotSteward");
     });
+  });
 
-    it("tells the guardian when a verified volunteer is at the door", async () => {
+  describe("visits", () => {
+    const tagFor = (secret, nonce) => ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(["bytes32", "bytes32"], [secret, nonce]));
+
+    async function arrive(pk, id, secret) {
+      const nonce = ethers.hexlify(ethers.randomBytes(32));
+      const challenge = ethers.hexlify(ethers.randomBytes(32));
+      const tag = tagFor(secret, nonce);
+      const digest = await bank.arriveDigest(tag, nonce, ethers.ZeroHash, challenge);
+      const tx = await bank.arrive(id, tag, nonce, ethers.ZeroHash, challenge, pk.sign(digest));
+      const visitId = ethers.keccak256(ethers.AbiCoder.defaultAbiCoder().encode(["bytes32", "bytes32"], [id, challenge]));
+      return { tx, visitId, tag, nonce };
+    }
+
+    it("records an arrival under a blinded tag that only the card secret can recognise", async () => {
       const community = ethers.encodeBytes32String("Sunrise Community");
       await bank.certify(bobId, community);
+      const secret = ethers.hexlify(ethers.randomBytes(32));
+      const { tx, visitId, tag, nonce } = await arrive(bob, bobId, secret);
+      await expect(tx).to.emit(bank, "Arrived").withArgs(visitId, bobId, tag, nonce, ethers.ZeroHash, community);
+      expect(tagFor(secret, nonce)).to.equal(tag);
+      expect(tagFor(ethers.hexlify(ethers.randomBytes(32)), nonce)).to.not.equal(tag);
+      expect(await bank.openVisitOf(bobId)).to.equal(visitId);
+      const stored = await bank.visits(visitId);
+      expect(stored.tag).to.equal(tag);
+      expect(stored.nonce).to.equal(nonce);
+    });
+
+    it("rejects an arrival signed by someone else", async () => {
       const challenge = ethers.hexlify(ethers.randomBytes(32));
-      const digest = await bank.visitDigest(momId, challenge);
-      await expect(bank.visit(bobId, momId, challenge, bob.sign(digest)))
-        .to.emit(bank, "Visited")
-        .withArgs(momId, bobId, community)
-        .and.to.emit(bank, "PresenceVerified")
-        .withArgs(challenge, bobId, community);
-      await expect(bank.visit(bobId, momId, challenge, bob.sign(challenge))).to.be.revertedWithCustomError(
+      const digest = await bank.arriveDigest(ethers.ZeroHash, ethers.ZeroHash, ethers.ZeroHash, challenge);
+      await expect(bank.arrive(bobId, ethers.ZeroHash, ethers.ZeroHash, ethers.ZeroHash, challenge, alice.sign(digest)))
+        .to.be.revertedWithCustomError(bank, "BadSignature")
+        .withArgs(bobId);
+    });
+
+    it("keeps one open visit per helper: arriving elsewhere closes the previous one", async () => {
+      const first = await arrive(bob, bobId, ethers.ZeroHash);
+      const second = await arrive(bob, bobId, ethers.ZeroHash);
+      await expect(second.tx).to.emit(bank, "VisitClosed").withArgs(first.visitId, await bank.NO_SEAL(), 0, 0);
+      expect(await bank.openVisitOf(bobId)).to.equal(second.visitId);
+      // The superseded visit can no longer back a seal.
+      await expect(sealHelp(bob, bobId, alice, aliceId, 60, CARE, false, { visitId: first.visitId }))
+        .to.be.revertedWithCustomError(bank, "BadVisit")
+        .withArgs(first.visitId);
+    });
+
+    it("links a seal to the arrival and reports the minutes actually present", async () => {
+      const { visitId } = await arrive(bob, bobId, ethers.ZeroHash);
+      await ethers.provider.send("evm_increaseTime", [45 * 60]);
+      const tx = sealHelp(bob, bobId, alice, aliceId, 60, CARE, false, { visitId });
+      // Claimed 60, present ~45: recorded for audit rather than rejected.
+      await expect(tx).to.emit(bank, "VisitClosed").withArgs(visitId, 0, 60, 45);
+      expect(await bank.visitOfSeal(0)).to.equal(visitId);
+      expect(await bank.openVisitOf(bobId)).to.equal(ethers.ZeroHash);
+      await expect(sealHelp(bob, bobId, alice, aliceId, 30, CARE, false, { visitId }))
+        .to.be.revertedWithCustomError(bank, "BadVisit");
+    });
+
+    it("does not let one helper use another helper's arrival", async () => {
+      const { visitId } = await arrive(bob, bobId, ethers.ZeroHash);
+      await expect(sealHelp(alice, aliceId, mom, momId, 60, CARE, false, { visitId }))
+        .to.be.revertedWithCustomError(bank, "BadVisit")
+        .withArgs(visitId);
+    });
+
+    it("rejects a confirmation used after its deadline", async () => {
+      const now = BigInt((await ethers.provider.getBlock("latest")).timestamp);
+      await expect(sealHelp(alice, aliceId, bob, bobId, 60, CARE, false, { deadline: now + 60n })).to.emit(bank, "Sealed");
+      await ethers.provider.send("evm_increaseTime", [120]);
+      await expect(sealHelp(alice, aliceId, bob, bobId, 60, CARE, false, { deadline: now + 60n })).to.be.revertedWithCustomError(
         bank,
-        "BadSignature"
+        "Expired"
       );
     });
   });

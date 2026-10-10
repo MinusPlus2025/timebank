@@ -1679,3 +1679,8 @@ body {
   display: flex;
   gap: 14px;
 }
+.arrival {
+  margin: 4px 0;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}

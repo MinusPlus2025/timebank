@@ -7,7 +7,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { timeBankAbi } from "../src/abi.js";
 import { DEPLOYED } from "../src/deployment.js";
 
-const ALLOWED = new Set(["register", "seal", "gift", "donate", "checkIn", "registerDependent", "sealByGuardian", "visit"]);
+const ALLOWED = new Set(["register", "seal", "gift", "donate", "checkIn", "registerDependent", "sealByGuardian", "arrive"]);
 
 function clients() {
   const key = process.env.RELAYER_PRIVATE_KEY as Hex | undefined;

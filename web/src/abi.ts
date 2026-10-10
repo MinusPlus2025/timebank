@@ -31,6 +31,22 @@ export const timeBankAbi = [
     "inputs": [
       {
         "internalType": "bytes32",
+        "name": "visitId",
+        "type": "bytes32"
+      }
+    ],
+    "name": "BadVisit",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "Expired",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
         "name": "id",
         "type": "bytes32"
       }
@@ -74,6 +90,49 @@ export const timeBankAbi = [
     ],
     "name": "UnknownMember",
     "type": "error"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "visitId",
+        "type": "bytes32"
+      },
+      {
+        "indexed": true,
+        "internalType": "bytes32",
+        "name": "visitor",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32",
+        "name": "tag",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32",
+        "name": "nonce",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32",
+        "name": "locationHash",
+        "type": "bytes32"
+      },
+      {
+        "indexed": false,
+        "internalType": "bytes32",
+        "name": "community",
+        "type": "bytes32"
+      }
+    ],
+    "name": "Arrived",
+    "type": "event"
   },
   {
     "anonymous": false,
@@ -282,23 +341,29 @@ export const timeBankAbi = [
       {
         "indexed": true,
         "internalType": "bytes32",
-        "name": "host",
-        "type": "bytes32"
-      },
-      {
-        "indexed": true,
-        "internalType": "bytes32",
-        "name": "visitor",
+        "name": "visitId",
         "type": "bytes32"
       },
       {
         "indexed": false,
-        "internalType": "bytes32",
-        "name": "community",
-        "type": "bytes32"
+        "internalType": "uint256",
+        "name": "sealId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "claimedMinutes",
+        "type": "uint32"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint32",
+        "name": "presentMinutes",
+        "type": "uint32"
       }
     ],
-    "name": "Visited",
+    "name": "VisitClosed",
     "type": "event"
   },
   {
@@ -309,6 +374,19 @@ export const timeBankAbi = [
         "internalType": "uint32",
         "name": "",
         "type": "uint32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "NO_SEAL",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
       }
     ],
     "stateMutability": "view",
@@ -330,6 +408,106 @@ export const timeBankAbi = [
     "name": "appointGuardian",
     "outputs": [],
     "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "visitor",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "tag",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "nonce",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "locationHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "challenge",
+        "type": "bytes32"
+      },
+      {
+        "components": [
+          {
+            "internalType": "bytes",
+            "name": "authenticatorData",
+            "type": "bytes"
+          },
+          {
+            "internalType": "string",
+            "name": "clientDataSuffix",
+            "type": "string"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "r",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "s",
+            "type": "bytes32"
+          }
+        ],
+        "internalType": "struct WebAuthnP256.Assertion",
+        "name": "sig",
+        "type": "tuple"
+      }
+    ],
+    "name": "arrive",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "visitId",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "tag",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "nonce",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "locationHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "challenge",
+        "type": "bytes32"
+      }
+    ],
+    "name": "arriveDigest",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -706,6 +884,25 @@ export const timeBankAbi = [
     "type": "function"
   },
   {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "name": "openVisitOf",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [],
     "name": "poolBalance",
     "outputs": [
@@ -791,29 +988,46 @@ export const timeBankAbi = [
   {
     "inputs": [
       {
-        "internalType": "bytes32",
-        "name": "helper",
-        "type": "bytes32"
-      },
-      {
-        "internalType": "bytes32",
-        "name": "receiver",
-        "type": "bytes32"
-      },
-      {
-        "internalType": "uint32",
-        "name": "minutes_",
-        "type": "uint32"
-      },
-      {
-        "internalType": "uint8",
-        "name": "category",
-        "type": "uint8"
-      },
-      {
-        "internalType": "bool",
-        "name": "redeem",
-        "type": "bool"
+        "components": [
+          {
+            "internalType": "bytes32",
+            "name": "helper",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "receiver",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "minutes_",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint8",
+            "name": "category",
+            "type": "uint8"
+          },
+          {
+            "internalType": "bool",
+            "name": "redeem",
+            "type": "bool"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "visitId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "deadline",
+            "type": "uint64"
+          }
+        ],
+        "internalType": "struct TimeBank.SealRequest",
+        "name": "q",
+        "type": "tuple"
       },
       {
         "components": [
@@ -884,29 +1098,46 @@ export const timeBankAbi = [
   {
     "inputs": [
       {
-        "internalType": "bytes32",
-        "name": "helper",
-        "type": "bytes32"
-      },
-      {
-        "internalType": "bytes32",
-        "name": "receiver",
-        "type": "bytes32"
-      },
-      {
-        "internalType": "uint32",
-        "name": "minutes_",
-        "type": "uint32"
-      },
-      {
-        "internalType": "uint8",
-        "name": "category",
-        "type": "uint8"
-      },
-      {
-        "internalType": "bool",
-        "name": "redeem",
-        "type": "bool"
+        "components": [
+          {
+            "internalType": "bytes32",
+            "name": "helper",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "receiver",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "minutes_",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint8",
+            "name": "category",
+            "type": "uint8"
+          },
+          {
+            "internalType": "bool",
+            "name": "redeem",
+            "type": "bool"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "visitId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "deadline",
+            "type": "uint64"
+          }
+        ],
+        "internalType": "struct TimeBank.SealRequest",
+        "name": "q",
+        "type": "tuple"
       },
       {
         "components": [
@@ -990,29 +1221,46 @@ export const timeBankAbi = [
   {
     "inputs": [
       {
-        "internalType": "bytes32",
-        "name": "helper",
-        "type": "bytes32"
-      },
-      {
-        "internalType": "bytes32",
-        "name": "receiver",
-        "type": "bytes32"
-      },
-      {
-        "internalType": "uint32",
-        "name": "minutes_",
-        "type": "uint32"
-      },
-      {
-        "internalType": "uint8",
-        "name": "category",
-        "type": "uint8"
-      },
-      {
-        "internalType": "bool",
-        "name": "redeem",
-        "type": "bool"
+        "components": [
+          {
+            "internalType": "bytes32",
+            "name": "helper",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "receiver",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "minutes_",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint8",
+            "name": "category",
+            "type": "uint8"
+          },
+          {
+            "internalType": "bool",
+            "name": "redeem",
+            "type": "bool"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "visitId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "deadline",
+            "type": "uint64"
+          }
+        ],
+        "internalType": "struct TimeBank.SealRequest",
+        "name": "q",
+        "type": "tuple"
       }
     ],
     "name": "sealDigest",
@@ -1211,71 +1459,55 @@ export const timeBankAbi = [
   {
     "inputs": [
       {
-        "internalType": "bytes32",
-        "name": "visitor",
-        "type": "bytes32"
-      },
-      {
-        "internalType": "bytes32",
-        "name": "host",
-        "type": "bytes32"
-      },
-      {
-        "internalType": "bytes32",
-        "name": "challenge",
-        "type": "bytes32"
-      },
-      {
-        "components": [
-          {
-            "internalType": "bytes",
-            "name": "authenticatorData",
-            "type": "bytes"
-          },
-          {
-            "internalType": "string",
-            "name": "clientDataSuffix",
-            "type": "string"
-          },
-          {
-            "internalType": "bytes32",
-            "name": "r",
-            "type": "bytes32"
-          },
-          {
-            "internalType": "bytes32",
-            "name": "s",
-            "type": "bytes32"
-          }
-        ],
-        "internalType": "struct WebAuthnP256.Assertion",
-        "name": "sig",
-        "type": "tuple"
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
       }
     ],
-    "name": "visit",
-    "outputs": [],
-    "stateMutability": "nonpayable",
+    "name": "visitOfSeal",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {
     "inputs": [
       {
         "internalType": "bytes32",
-        "name": "host",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "name": "visits",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "visitor",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint64",
+        "name": "start",
+        "type": "uint64"
+      },
+      {
+        "internalType": "bool",
+        "name": "closed",
+        "type": "bool"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "tag",
         "type": "bytes32"
       },
       {
         "internalType": "bytes32",
-        "name": "challenge",
-        "type": "bytes32"
-      }
-    ],
-    "name": "visitDigest",
-    "outputs": [
-      {
-        "internalType": "bytes32",
-        "name": "",
+        "name": "nonce",
         "type": "bytes32"
       }
     ],

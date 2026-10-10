@@ -17,9 +17,18 @@ async function main() {
   const [impostor] = await bank.verifyPresence(bobId, challenge, new Passkey().sign(challenge));
   console.log(`door check: real=${ok} impostor=${impostor}`);
 
-  const digest = await bank.sealDigest(aliceId, bobId, 60, 2, false);
+  const q = {
+    helper: aliceId,
+    receiver: bobId,
+    minutes_: 60,
+    category: 2,
+    redeem: false,
+    visitId: ethers.ZeroHash,
+    deadline: Math.floor(Date.now() / 1000) + 600,
+  };
+  const digest = await bank.sealDigest(q);
   const t0 = Date.now();
-  const tx = await bank.seal(aliceId, bobId, 60, 2, false, alice.sign(digest), bob.sign(digest));
+  const tx = await bank.seal(q, alice.sign(digest), bob.sign(digest));
   const receipt = await tx.wait();
   console.log(`seal tx ${receipt.hash} gas=${receipt.gasUsed} confirmed in ${Date.now() - t0} ms`);
   console.log(`alice balance: ${(await bank.members(aliceId)).balance} minutes`);
