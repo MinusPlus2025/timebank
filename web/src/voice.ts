@@ -2,37 +2,69 @@
 // Uses the browser's built-in speech synthesis, so it works offline and needs no account.
 // Everything spoken is also shown on screen, and every sound has a visual equivalent,
 // so nothing depends on hearing alone.
+//
+// iOS Safari only lets a page speak after one utterance has been started synchronously
+// inside a tap, and that unlock is lost on every page load. So until a tap has happened,
+// the latest guidance is kept and spoken by the first tap anywhere on the page.
 import { useEffect } from "react";
 import type { Lang } from "./i18n";
 
 let enabled = false;
 let lang: Lang = "zh";
+let unlocked = false;
+let pending = "";
 
-/** Must run inside a tap: iOS only allows speech after the user has started it once. */
-export function unlockVoice() {
-  if (!voiceSupported()) return;
-  const u = new SpeechSynthesisUtterance(" ");
-  u.volume = 0;
-  window.speechSynthesis.speak(u);
+export const voiceSupported = () => typeof window !== "undefined" && "speechSynthesis" in window;
+
+function onFirstTap() {
+  if (unlocked || !enabled) return;
+  // Synchronous on purpose: this call is what iOS counts as user-initiated speech.
+  say(pending || " ");
+  unlocked = true;
+  pending = "";
+}
+
+if (voiceSupported()) {
+  for (const type of ["pointerup", "touchend", "keydown"]) document.addEventListener(type, onFirstTap, { capture: true });
 }
 
 export function configureVoice(on: boolean, l: Lang) {
   enabled = on;
   lang = l;
-  if (!on) window.speechSynthesis?.cancel();
+  if (!on && voiceSupported()) window.speechSynthesis.cancel();
 }
 
-export const voiceSupported = () => typeof window !== "undefined" && "speechSynthesis" in window;
+/** Call from inside the tap that turns voice on, so the first words count as user-initiated. */
+export function speakFromTap(text: string) {
+  announce(text);
+  if (!voiceSupported()) return;
+  const synth = window.speechSynthesis;
+  if (synth.speaking || synth.pending) synth.cancel();
+  say(text);
+  unlocked = true;
+  pending = "";
+}
 
 export function speak(text: string) {
   announce(text);
   if (!enabled || !voiceSupported()) return;
+  if (!unlocked) {
+    pending = text;
+    return;
+  }
   const synth = window.speechSynthesis;
-  // iOS Safari drops an utterance queued right after cancel(), so give it a moment.
   if (synth.speaking || synth.pending) {
     synth.cancel();
-    setTimeout(() => say(text), 120);
+    // iOS Safari drops an utterance queued in the same tick as cancel().
+    setTimeout(() => say(text), 150);
   } else say(text);
+}
+
+function pickVoice(code: string) {
+  const voices = window.speechSynthesis.getVoices();
+  const exact = voices.filter((v) => v.lang.replace("_", "-").toLowerCase() === code.toLowerCase());
+  const pool = exact.length ? exact : voices.filter((v) => v.lang.toLowerCase().startsWith(code.slice(0, 2)));
+  return pool.find((v) => v.localService) ?? pool[0];
 }
 
 function say(text: string) {
@@ -40,8 +72,11 @@ function say(text: string) {
   const u = new SpeechSynthesisUtterance(text);
   u.lang = lang === "zh" ? "zh-CN" : "en-US";
   u.rate = 0.92; // a little slower than default, easier for older listeners
-  const voice = synth.getVoices().find((v) => v.lang.toLowerCase().startsWith(u.lang.toLowerCase().slice(0, 2)));
+  u.volume = 1;
+  const voice = pickVoice(u.lang);
   if (voice) u.voice = voice;
+  // Chrome can get stuck paused after the tab was in the background.
+  synth.resume();
   synth.speak(u);
 }
 
