@@ -38,11 +38,34 @@ async function shot(p, file) {
 
 async function register(p) {
   await p.page.goto(BASE);
+  await p.page.waitForSelector(".splash");
+  if (p.name === "小王") {
+    await p.page.waitForTimeout(2600);
+    await shot(p, "00-splash");
+  }
+  await p.page.click(".splash");
+  await p.page.waitForSelector(".onboarding");
+  if (p.name === "小王") {
+    await p.page.waitForTimeout(900);
+    await shot(p, "00-onboarding-1");
+    await p.page.click(".onb-actions .primary");
+    await p.page.waitForTimeout(900);
+    await shot(p, "00-onboarding-2");
+    await p.page.click(".onb-actions .primary");
+    await p.page.waitForTimeout(900);
+    await shot(p, "00-onboarding-3");
+    await p.page.click(".onb-actions .primary");
+  } else {
+    await p.page.click(".onb-actions .link");
+  }
   await p.page.waitForSelector("input");
   await p.page.fill("input", p.name);
-  if (p.name === "小王") await shot(p, "01-welcome");
+  if (p.name === "小王") {
+    await p.page.waitForTimeout(1800);
+    await shot(p, "01-welcome");
+  }
   await p.page.click("button.primary");
-  await p.page.waitForSelector(".big-number");
+  await p.page.waitForSelector(".headline");
   const me = JSON.parse(await p.page.evaluate(() => localStorage.getItem("timebank.me")));
   console.log(`registered ${p.name} ${me.id}`);
   return me.id;
@@ -51,8 +74,8 @@ async function register(p) {
 const balance = async (p) => {
   await p.page.goto(BASE + "#/");
   await p.page.reload();
-  await p.page.waitForFunction(() => !document.querySelector(".big-number")?.textContent?.includes("…"));
-  return p.page.textContent(".big-number");
+  await p.page.waitForFunction(() => !document.querySelector(".dock-balance b")?.textContent?.includes("…"));
+  return p.page.textContent(".dock-balance b");
 };
 
 async function thankAndSeal(receiver, helper, helperId, { category, minutesLabel, pay }) {
@@ -66,8 +89,8 @@ async function thankAndSeal(receiver, helper, helperId, { category, minutesLabel
   await helper.page.goto(url);
   await shot(helper, "04-confirm");
   await helper.page.click("button.primary");
-  await helper.page.waitForSelector(".sealed", { timeout: 30000 });
-  await helper.page.waitForTimeout(900);
+  await helper.page.waitForSelector(".celebrate", { timeout: 30000 });
+  await helper.page.waitForTimeout(2200);
   await shot(helper, "05-sealed");
 }
 
@@ -91,17 +114,25 @@ await wang.page.getByRole("radio", { name: "1 小时", exact: true }).click();
 await shot(wang, "06-gift");
 await wang.page.click("button.primary");
 await wang.page.waitForSelector(".quote", { timeout: 30000 });
+await wang.page.waitForTimeout(2200);
 await shot(wang, "07-gifted");
 console.log("妈妈 balance after gift:", await balance(mom));
 
 // 3. Local volunteer 小赵 takes 妈妈 to the clinic; 妈妈 pays with the gifted hour.
 await thankAndSeal(mom, zhao, zhaoId, { category: "陪诊", minutesLabel: "1 小时", pay: true });
+await wang.page.goto(BASE + "#/");
 console.log("妈妈 balance after redeem:", await balance(mom));
 console.log("小赵 balance:", await balance(zhao));
 await wang.page.goto(BASE + "#/");
 await wang.page.reload();
-await wang.page.waitForSelector(".album li");
+await wang.page.waitForSelector(".facade-grid .tile-button");
+await wang.page.waitForTimeout(1500);
 await shot(wang, "02-home");
+await wang.page.click(".facade-grid .tile-button:nth-child(2)");
+await wang.page.waitForSelector(".window-detail");
+await wang.page.waitForTimeout(700);
+await shot(wang, "02b-window-open");
+await wang.page.click(".window-detail .secondary");
 
 // 4. Door check: the steward certifies 小赵, then 妈妈 checks him at the door.
 execSync(`npx hardhat run scripts/certify.js --network localhost`, {
@@ -116,12 +147,14 @@ await zhao.page.goto(checkinUrl);
 await zhao.page.click("button.primary");
 await zhao.page.waitForSelector(".note.ok", { timeout: 30000 });
 await mom.page.waitForSelector(".verified", { timeout: 30000 });
+await mom.page.waitForTimeout(1500);
 await shot(mom, "09-door-verified");
 console.log("door:", (await mom.page.textContent(".verified")).trim());
 
 // 5. English locale renders the wax-seal style.
-await wang.page.getByRole("button", { name: "English" }).click();
-await wang.page.waitForSelector(".album li");
+await wang.page.getByRole("button", { name: "EN" }).click();
+await wang.page.waitForSelector(".facade-grid .tile-button");
+await wang.page.waitForTimeout(800);
 await shot(wang, "10-home-en");
 
 await browser.close();

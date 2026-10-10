@@ -1,14 +1,16 @@
-# 时间银行 TimeBank
+# timebank · 时间银行
 
-**每一份付出，盖一枚印。Every hour of help, sealed by two people.**
+**Every bit of care, seen. 每一份付出，都有人看见。**
 
 AI can do things for you. It can't be there for you. TimeBank records time that neighbours give each other. Every hour is sealed in person by **two passkeys** (Face ID / fingerprint) and verified on **Monad** with its native P256 precompile, so the record outlives any operator.
 
 Monad Metropolis 2026 · Track: Trust, Identity & AI Infrastructure
 
-| Welcome | Seal landed | Seal album | Door check |
-|---|---|---|---|
-| ![](assets/screenshots/01-welcome.png) | ![](assets/screenshots/05-sealed.png) | ![](assets/screenshots/02-home.png) | ![](assets/screenshots/09-door-verified.png) |
+| Day | Night | A window opens | Seal: lights between two windows | Door check |
+|---|---|---|---|---|
+| ![](assets/screenshots/day/02-home.png) | ![](assets/screenshots/night/02-home.png) | ![](assets/screenshots/night/02b-window-open.png) | ![](assets/screenshots/day/05-sealed.png) | ![](assets/screenshots/night/09-door-verified.png) |
+
+The app follows the viewer's local clock: green walls and pink rooms by day, indigo walls and lit windows by night. Every window you light is an hour you gave.
 
 ## The problem
 - Time banks (volunteers bank hours of care and spend them later) are a recognised social model, with pilots run by the Chinese government, Timebanking UK and hOurworld (about 30k members in 22 countries).
@@ -22,7 +24,7 @@ Monad Metropolis 2026 · Track: Trust, Identity & AI Infrastructure
 3. **Give time to family.** A daughter in Shanghai gives her hours to her mother in another city, and a local volunteer takes her mother to the clinic. *"I can't be with you, but someone will be, for me."*
 4. **Anonymous donation** to a community pool, which the community grants to people in need.
 5. **Door check.** Before opening the door, the host shows a QR code. The visitor signs with their passkey, and within about a second the host's screen shows "verified, volunteer of Sunrise Community".
-6. **Seal album.** Each seal is generated from its on-chain seed. It renders as a carved square seal in Chinese and a wax seal in English.
+6. **Your building.** Your home screen is a building. Each act of help lights a window showing that scene, and you can tap a window to open it. Illustrations show neighbours of many ages and cultures. They were generated with Figma AI and art-directed by the author.
 
 ### Ethics, by design
 - **Family members are never measured against each other.** Hours are earned with neighbours and strangers. Family only *receive* gifts.

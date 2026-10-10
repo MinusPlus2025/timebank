@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { hexToString, toHex, type Hex } from "viem";
-import { CATEGORIES, detectLang, formatMinutes, strings, type Lang, type Strings } from "./i18n";
+import { CATEGORIES, detectLang, formatHours, formatMinutes, strings, type Lang, type Strings } from "./i18n";
 import { idOf, loadMe, saveMe, shortId, encodeSealPayload, decodeSealPayload, type Me, type SealPayload } from "./identity";
 import { createPasskey, passkeysSupported, signWithPasskey } from "./passkey";
 import * as chain from "./chain";
-import { SealArt } from "./SealArt";
 import { stampFeedback } from "./feedback";
 import { CopyLink, ErrorNote, QR, Screen, errorMessage } from "./ui";
+import { usePhase, type Phase } from "./theme";
+import { Wordmark } from "./Brand";
+import { Door, Facade, Garland, PaperPlane, TILE, WindowTile } from "./Windows";
+import { Onboarding } from "./Onboarding";
 
 // ---------- routing & app state ----------
 
@@ -26,9 +29,9 @@ function useHashRoute() {
 const go = (path: string) => (window.location.hash = path);
 const appUrl = (path: string) => `${window.location.origin}${window.location.pathname}#${path}`;
 
-function readPref<T extends string>(key: string, fallback: T): T {
+function readPref(key: string, fallback: string): string {
   try {
-    return (localStorage.getItem(key) as T) || fallback;
+    return localStorage.getItem(key) ?? fallback;
   } catch {
     return fallback;
   }
@@ -41,7 +44,9 @@ function writePref(key: string, value: string) {
   }
 }
 
-type Ctx = { s: Strings; lang: Lang; me: Me | null; setMe: (m: Me) => void };
+type Ctx = { s: Strings; lang: Lang; phase: Phase; me: Me | null; setMe: (m: Me) => void };
+
+const tileFor = (category: number) => CATEGORIES.find((c) => c.id === category)?.tile ?? 4;
 
 /** Sign with a passkey and work out which member signed. */
 async function signAs(challenge: Hex, expected?: Hex) {
@@ -67,23 +72,47 @@ function useAsync() {
       setBusy(false);
     }
   }, []);
-  return { busy, error, run, setError };
+  return { busy, error, run };
 }
 
 // ---------- screens ----------
 
-function Welcome({ s, lang, setMe }: Ctx) {
+function Welcome({ s, phase, setMe }: Ctx) {
+  const [seen, setSeen] = useState(() => readPref("timebank.onboarded", "0") === "1");
+  const [splash, setSplash] = useState(true);
   const [name, setName] = useState("");
   const { busy, error, run } = useAsync();
-  const supported = passkeysSupported();
+  useEffect(() => {
+    const t = setTimeout(() => setSplash(false), 3200);
+    return () => clearTimeout(t);
+  }, []);
+
+  if (splash)
+    return (
+      <main className="splash" onClick={() => setSplash(false)}>
+        <Wordmark size={64} animated />
+        <p>{s.tagline}</p>
+      </main>
+    );
+
+  if (!seen)
+    return (
+      <Onboarding
+        s={s}
+        phase={phase}
+        onDone={() => {
+          writePref("timebank.onboarded", "1");
+          setSeen(true);
+        }}
+      />
+    );
 
   const create = () =>
     run(async () => {
-      const { x, y } = await createPasskey(name.trim() || "TimeBank");
+      const { x, y } = await createPasskey(name.trim() || "timebank");
       await chain.relay("register", [x, y]);
       setMe({ id: idOf(x, y), x, y, name: name.trim() });
     });
-
   const signIn = () =>
     run(async () => {
       const r = await signAs(toHex(crypto.getRandomValues(new Uint8Array(32))));
@@ -91,92 +120,118 @@ function Welcome({ s, lang, setMe }: Ctx) {
     });
 
   return (
-    <Screen s={s}>
-      <div className="hero">
-        <SealArt seed={"0x7f3a9c21d04e5b88a1c3e6f2d9b4a7c05e8f1d2a3b4c5d6e7f8091a2b3c4d5e6"} category={1} lang={lang} size={150} />
-        <h1 className="brand">{s.appName}</h1>
-        <p className="tagline">{s.tagline}</p>
-        <p className="lede">{s.subTagline}</p>
+    <main className="welcome">
+      <div className="welcome-window">
+        <WindowTile phase={phase} tile={TILE.you} lit={false} />
       </div>
-      {!supported ? (
+      <Wordmark size={44} animated />
+      <p className="tagline">{s.tagline}</p>
+      {!passkeysSupported() ? (
         <p className="note error">{s.noPasskey}</p>
       ) : (
-        <div className="card">
+        <div className="sheet">
           <label className="field">
             <span>{s.namePrompt}</span>
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder={s.namePlaceholder} maxLength={20} />
             <small>{s.nameHint}</small>
           </label>
           <button className="primary" disabled={busy} onClick={create}>
-            {busy ? s.creating : `🙂 ${s.createPasskey}`}
+            {busy ? s.creating : s.createPasskey}
           </button>
           <button className="link" disabled={busy} onClick={signIn}>
-            {lang === "zh" ? "已经有印？刷脸找回" : "Already have a seal? Sign in"}
+            {s.signInExisting}
           </button>
           {error && <ErrorNote error={error} s={s} />}
         </div>
       )}
       <p className="ethics">{s.ethics}</p>
-    </Screen>
+    </main>
   );
 }
 
-function Home({ s, lang, me }: Ctx & { me: Me }) {
+function Home({ s, lang, phase, me }: Ctx & { me: Me }) {
   const [member, setMember] = useState<chain.Member | null>(null);
   const [seals, setSeals] = useState<chain.SealRecord[]>([]);
+  const [open, setOpen] = useState<chain.SealRecord | null>(null);
   useEffect(() => {
     chain.getMember(me.id).then(setMember).catch(() => undefined);
     chain.getSealsOf(me.id).then((list) => setSeals(list.reverse())).catch(() => undefined);
   }, [me.id]);
 
+  const given = seals.filter((x) => x.helper === me.id).reduce((sum, x) => sum + x.minutes, 0);
+  const total = Math.max(9, Math.ceil((seals.length + 1) / 3) * 3);
+  const unlit = total - seals.length - 1;
+
   return (
-    <Screen s={s}>
-      <section className="balance card">
-        <p className="muted">{me.name ? `${me.name} · ` : ""}{s.myTime}</p>
-        <p className="big-number">{member ? formatMinutes(member.balance, s) : "…"}</p>
-      </section>
-      <nav className="actions">
-        <button className="primary" onClick={() => go("/code")}>▦ {s.myCode}</button>
-        <button className="secondary" onClick={() => go("/door")}>🚪 {s.door}</button>
-        <button className="secondary" onClick={() => go("/donate")} disabled={!member?.balance}>🕊 {s.donate}</button>
+    <main className="home">
+      <header className="sky">
+        <p className="greeting">
+          {phase === "day" ? s.greetingDay : s.greetingNight}
+          {me.name ? `${lang === "zh" ? "，" : ", "}${me.name}` : ""}
+        </p>
+        <div className="headline">
+          <b>{formatHours(given)}</b>
+          <span>
+            {s.litHeadline}
+            <small>{s.litSub}</small>
+          </span>
+        </div>
+      </header>
+      <Facade>
+        <WindowTile phase={phase} tile={TILE.you} label={s.yourWindow} onClick={() => go("/code")} />
+        {seals.map((seal) => (
+          <WindowTile
+            key={seal.id}
+            phase={phase}
+            tile={tileFor(seal.category)}
+            label={CATEGORIES.find((c) => c.id === seal.category)?.[lang]}
+            onClick={() => setOpen(seal)}
+          />
+        ))}
+        {Array.from({ length: unlit }, (_, i) => (
+          <WindowTile key={`u${i}`} phase={phase} tile={TILE.unlit[i % 2]} lit={false} />
+        ))}
+      </Facade>
+      <nav className="dock">
+        <div className="dock-balance">
+          <small>{s.available}</small>
+          <b>{member ? formatMinutes(member.balance, s) : "…"}</b>
+        </div>
+        <button className="dock-btn main" onClick={() => go("/code")}>{s.myCode}</button>
+        <button className="dock-btn" onClick={() => go("/door")}>{s.door}</button>
+        <button className="dock-btn" onClick={() => go("/donate")} disabled={!member?.balance}>{s.donate}</button>
       </nav>
-      <section>
-        <h2>{s.myAlbum}</h2>
-        {seals.length === 0 ? (
-          <p className="muted">{s.albumEmpty}</p>
-        ) : (
-          <ul className="album">
-            {seals.map((seal) => {
-              const cat = CATEGORIES.find((c) => c.id === seal.category);
-              const helped = seal.helper === me.id;
-              return (
-                <li key={seal.id}>
-                  <SealArt seed={seal.seed} category={seal.category} lang={lang} size={96} />
-                  <span className="album-label">
-                    {cat?.icon} {cat?.[lang]} · {formatMinutes(seal.minutes, s)}
-                  </span>
-                  <span className="muted small">
-                    {helped ? s.iHelped : s.helpedMe} · {new Date(seal.timestamp * 1000).toLocaleDateString(lang === "zh" ? "zh-CN" : "en-GB")}
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </section>
-      <a className="link small footer-link" href={`${chain.EXPLORER}/address/${chain.TIMEBANK}`} target="_blank" rel="noreferrer">
-        {s.onChain} ↗
-      </a>
-    </Screen>
+      {open && (
+        <div className="overlay" onClick={() => setOpen(null)}>
+          <div className="sheet window-detail" onClick={(e) => e.stopPropagation()}>
+            <WindowTile phase={phase} tile={tileFor(open.category)} fresh />
+            <h2>
+              {CATEGORIES.find((c) => c.id === open.category)?.[lang]} · {formatMinutes(open.minutes, s)}
+            </h2>
+            <p className="muted">
+              {open.helper === me.id ? s.iHelped : s.helpedMe} {shortId(open.helper === me.id ? open.receiver : open.helper)} ·{" "}
+              {new Date(open.timestamp * 1000).toLocaleDateString(lang === "zh" ? "zh-CN" : "en-GB")}
+            </p>
+            <a className="link" href={`${chain.EXPLORER}/address/${chain.TIMEBANK}`} target="_blank" rel="noreferrer">
+              {s.onChain} ↗
+            </a>
+            <button className="secondary" onClick={() => setOpen(null)}>{s.close}</button>
+          </div>
+        </div>
+      )}
+    </main>
   );
 }
 
-function MyCode({ s, me }: Ctx & { me: Me }) {
+function MyCode({ s, phase, me }: Ctx & { me: Me }) {
   const url = appUrl(`/u/${me.id}`);
   return (
     <Screen s={s} title={s.myCode} onBack={() => go("/")}>
-      <div className="card center">
-        <QR value={url} label={s.myCode} />
+      <div className="sheet center">
+        <div className="qr-frame">
+          <QR value={url} label={s.myCode} />
+          <span className="qr-badge"><WindowTile phase={phase} tile={TILE.you} /></span>
+        </div>
         <p className="muted">{s.myCodeHint}</p>
         <CopyLink url={url} s={s} />
       </div>
@@ -184,18 +239,19 @@ function MyCode({ s, me }: Ctx & { me: Me }) {
   );
 }
 
-function Person({ s, id }: Ctx & { id: Hex }) {
+function Person({ s, phase, id }: Ctx & { id: Hex }) {
   return (
     <Screen s={s} title={`${s.someone} ${shortId(id)}`} onBack={() => go("/")}>
-      <nav className="actions">
-        <button className="primary" onClick={() => go(`/thank/${id}`)}>🙏 {s.thank}</button>
-        <button className="secondary" onClick={() => go(`/gift/${id}`)}>🎁 {s.giftTo}</button>
-      </nav>
+      <div className="person-window"><WindowTile phase={phase} tile={TILE.unlit[0]} lit={false} /></div>
+      <div className="stack">
+        <button className="primary" onClick={() => go(`/thank/${id}`)}>{s.thank}</button>
+        <button className="secondary" onClick={() => go(`/gift/${id}`)}>{s.giftTo}</button>
+      </div>
     </Screen>
   );
 }
 
-function Choice<T extends number>({ options, value, onChange, render }: { options: readonly T[]; value: T; onChange: (v: T) => void; render: (v: T) => string }) {
+function Choice({ options, value, onChange, render }: { options: readonly number[]; value: number; onChange: (v: number) => void; render: (v: number) => string }) {
   return (
     <div className="choices" role="radiogroup">
       {options.map((o) => (
@@ -207,14 +263,13 @@ function Choice<T extends number>({ options, value, onChange, render }: { option
   );
 }
 
-function Thank({ s, lang, me, helper }: Ctx & { me: Me; helper: Hex }) {
-  const [category, setCategory] = useState<number>(1);
-  const [minutes, setMinutes] = useState<number>(60);
+function Thank({ s, lang, phase, me, helper }: Ctx & { me: Me; helper: Hex }) {
+  const [category, setCategory] = useState(1);
+  const [minutes, setMinutes] = useState(60);
   const [redeem, setRedeem] = useState(false);
   const [balance, setBalance] = useState(0);
   const [payload, setPayload] = useState("");
   const { busy, error, run } = useAsync();
-
   useEffect(() => {
     chain.getMember(me.id).then((m) => setBalance(m.balance)).catch(() => undefined);
   }, [me.id]);
@@ -232,7 +287,7 @@ function Thank({ s, lang, me, helper }: Ctx & { me: Me; helper: Hex }) {
     const url = appUrl(`/confirm/${payload}`);
     return (
       <Screen s={s} title={s.thankTitle} onBack={() => setPayload("")}>
-        <div className="card center">
+        <div className="sheet center">
           <QR value={url} label={s.showToHelper} />
           <p className="instruction">{s.showToHelper}</p>
           <CopyLink url={url} s={s} />
@@ -247,13 +302,13 @@ function Thank({ s, lang, me, helper }: Ctx & { me: Me; helper: Hex }) {
       <div className="categories">
         {CATEGORIES.map((c) => (
           <button key={c.id} className={c.id === category ? "category on" : "category"} aria-pressed={c.id === category} onClick={() => setCategory(c.id)}>
-            <span className="icon" aria-hidden>{c.icon}</span>
-            {c[lang]}
+            <WindowTile phase={phase} tile={c.tile} />
+            <span>{c[lang]}</span>
           </button>
         ))}
       </div>
       <h2>{s.howLong}</h2>
-      <Choice options={[30, 60, 90, 120] as const} value={minutes as 30} onChange={setMinutes} render={(m) => formatMinutes(m, s)} />
+      <Choice options={[30, 60, 90, 120]} value={minutes} onChange={setMinutes} render={(m) => formatMinutes(m, s)} />
       <label className="toggle">
         <input type="checkbox" checked={redeem} disabled={balance < minutes} onChange={(e) => setRedeem(e.target.checked)} />
         <span>
@@ -261,13 +316,13 @@ function Thank({ s, lang, me, helper }: Ctx & { me: Me; helper: Hex }) {
           <small>{s.payWithMineHint}</small>
         </span>
       </label>
-      <button className="primary" disabled={busy} onClick={sign}>🙂 {s.signThanks}</button>
+      <button className="primary" disabled={busy} onClick={sign}>{s.signThanks}</button>
       {error && <ErrorNote error={error === "wrong-person" ? s.wrongPerson : error} s={s} />}
     </Screen>
   );
 }
 
-function Confirm({ s, lang, me, setMe, raw }: Ctx & { raw: string }) {
+function Confirm({ s, lang, phase, me, setMe, raw }: Ctx & { raw: string }) {
   const p = useMemo(() => {
     try {
       return decodeSealPayload(raw);
@@ -275,7 +330,7 @@ function Confirm({ s, lang, me, setMe, raw }: Ctx & { raw: string }) {
       return null;
     }
   }, [raw]);
-  const [done, setDone] = useState<{ seal: chain.SealRecord; hash: Hex } | null>(null);
+  const [done, setDone] = useState<Hex | null>(null);
   const { busy, error, run } = useAsync();
   if (!p) return <Screen s={s}><ErrorNote error="bad link" s={s} /></Screen>;
   const cat = CATEGORIES.find((c) => c.id === p.c) ?? CATEGORIES[0];
@@ -286,19 +341,18 @@ function Confirm({ s, lang, me, setMe, raw }: Ctx & { raw: string }) {
       const helper = await signAs(digest, p.h);
       if (!me) setMe({ id: helper.id, x: helper.x, y: helper.y, name: "" });
       const { hash } = await chain.relay("seal", [p.h, p.r, p.m, p.c, p.d, chain.toArgs(helper.assertion), chain.toArgs(p.a)]);
-      const ids = await chain.getSealsOf(p.h);
-      setDone({ seal: ids[ids.length - 1], hash });
-      stampFeedback();
+      setDone(hash);
+      setTimeout(stampFeedback, 900);
     });
 
   if (done) {
     return (
       <Screen s={s}>
-        <div className="center sealed">
-          <SealArt seed={done.seal.seed} category={done.seal.category} lang={lang} size={220} animate />
+        <div className="center celebrate">
+          <Garland phase={phase} left={TILE.you} right={cat.tile} />
           <h1>{s.sealed}</h1>
           <p>{s.sealedBody}</p>
-          <a className="link" href={`${chain.EXPLORER}/tx/${done.hash}`} target="_blank" rel="noreferrer">{s.onChain} ↗</a>
+          <a className="link" href={`${chain.EXPLORER}/tx/${done}`} target="_blank" rel="noreferrer">{s.onChain} ↗</a>
           <button className="secondary" onClick={() => go("/")}>{s.home}</button>
         </div>
       </Screen>
@@ -307,20 +361,20 @@ function Confirm({ s, lang, me, setMe, raw }: Ctx & { raw: string }) {
 
   return (
     <Screen s={s} title={s.confirmTitle}>
-      <div className="card center">
-        <span className="icon-xl" aria-hidden>{cat.icon}</span>
+      <div className="sheet center">
+        <WindowTile phase={phase} tile={cat.tile} />
         <p className="instruction">{s.confirmBody(formatMinutes(p.m, s), cat[lang])}</p>
         <p className="muted small">{s.someone} {shortId(p.r)}</p>
-        <button className="primary" disabled={busy} onClick={seal}>{busy ? s.sealing : `🙂 ${s.signSeal}`}</button>
+        <button className="primary" disabled={busy} onClick={seal}>{busy ? s.sealing : s.signSeal}</button>
         {error && <ErrorNote error={error === "wrong-person" ? s.wrongPerson : error} s={s} />}
       </div>
     </Screen>
   );
 }
 
-function Gift({ s, me, to }: Ctx & { me: Me; to: Hex }) {
+function Gift({ s, phase, me, to }: Ctx & { me: Me; to: Hex }) {
   const [balance, setBalance] = useState(0);
-  const [minutes, setMinutes] = useState<number>(60);
+  const [minutes, setMinutes] = useState(60);
   const [done, setDone] = useState("");
   const { busy, error, run } = useAsync();
   useEffect(() => {
@@ -333,14 +387,14 @@ function Gift({ s, me, to }: Ctx & { me: Me; to: Hex }) {
       const { assertion } = await signAs(digest, me.id);
       const { hash } = await chain.relay("gift", [me.id, to, minutes, chain.toArgs(assertion)]);
       setDone(hash);
-      stampFeedback();
+      setTimeout(stampFeedback, 1600);
     });
 
   if (done) {
     return (
       <Screen s={s}>
-        <div className="center sealed">
-          <span className="icon-xl" aria-hidden>🎁</span>
+        <div className="center celebrate">
+          <PaperPlane phase={phase} />
           <h1>{s.gifted} · {formatMinutes(minutes, s)}</h1>
           <p className="quote">{s.giftedBody}</p>
           <a className="link" href={`${chain.EXPLORER}/tx/${done}`} target="_blank" rel="noreferrer">{s.onChain} ↗</a>
@@ -352,11 +406,12 @@ function Gift({ s, me, to }: Ctx & { me: Me; to: Hex }) {
 
   return (
     <Screen s={s} title={s.giftTitle} onBack={() => go("/")}>
+      <div className="gift-head"><WindowTile phase={phase} tile={TILE.family} /></div>
       <p className="muted">{s.giftHint}</p>
-      <p>{s.myTime}: <strong>{formatMinutes(balance, s)}</strong></p>
+      <p>{s.available}: <strong>{formatMinutes(balance, s)}</strong></p>
       <h2>{s.giftAmount}</h2>
-      <Choice options={[30, 60, 120, 300] as const} value={minutes as 30} onChange={setMinutes} render={(m) => formatMinutes(m, s)} />
-      <button className="primary" disabled={busy || balance < minutes} onClick={send}>🎁 {balance < minutes ? s.notEnough : s.signGift}</button>
+      <Choice options={[30, 60, 120, 300]} value={minutes} onChange={setMinutes} render={(m) => formatMinutes(m, s)} />
+      <button className="primary" disabled={busy || balance < minutes} onClick={send}>{balance < minutes ? s.notEnough : s.signGift}</button>
       {error && <ErrorNote error={error} s={s} />}
     </Screen>
   );
@@ -365,7 +420,7 @@ function Gift({ s, me, to }: Ctx & { me: Me; to: Hex }) {
 function Donate({ s, me }: Ctx & { me: Me }) {
   const [balance, setBalance] = useState(0);
   const [pool, setPool] = useState(0);
-  const [minutes, setMinutes] = useState<number>(30);
+  const [minutes, setMinutes] = useState(30);
   const [done, setDone] = useState(false);
   const { busy, error, run } = useAsync();
   useEffect(() => {
@@ -387,11 +442,11 @@ function Donate({ s, me }: Ctx & { me: Me }) {
       <p className="muted">{s.donateHint}</p>
       <p>{s.pool}: <strong>{formatMinutes(pool, s)}</strong></p>
       {done ? (
-        <p className="note ok">🕊 {s.donated}</p>
+        <p className="note ok">{s.donated}</p>
       ) : (
         <>
-          <Choice options={[30, 60, 120] as const} value={minutes as 30} onChange={setMinutes} render={(m) => formatMinutes(m, s)} />
-          <button className="primary" disabled={busy || balance < minutes} onClick={give}>🕊 {balance < minutes ? s.notEnough : s.donate}</button>
+          <Choice options={[30, 60, 120]} value={minutes} onChange={setMinutes} render={(m) => formatMinutes(m, s)} />
+          <button className="primary" disabled={busy || balance < minutes} onClick={give}>{balance < minutes ? s.notEnough : s.donate}</button>
         </>
       )}
       {error && <ErrorNote error={error} s={s} />}
@@ -399,7 +454,7 @@ function Donate({ s, me }: Ctx & { me: Me }) {
   );
 }
 
-function Door({ s }: Ctx) {
+function DoorCheck({ s, phase }: Ctx) {
   const [challenge] = useState(() => toHex(crypto.getRandomValues(new Uint8Array(32))));
   const [result, setResult] = useState<{ id: Hex; community: Hex } | null>(null);
   useEffect(() => {
@@ -428,18 +483,19 @@ function Door({ s }: Ctx) {
   const community = result && BigInt(result.community) !== 0n ? hexToString(result.community, { size: 32 }).replace(/\0/g, "") : "";
   return (
     <Screen s={s} title={s.doorTitle} onBack={() => go("/")}>
+      <Door open={!!result}>
+        {result ? <WindowTile phase={phase} tile={0} /> : <QR value={appUrl(`/checkin/${challenge}`)} label={s.doorTitle} />}
+      </Door>
       {result ? (
-        <div className={community ? "card center verified" : "card center warn"} role="status">
-          <span className="icon-xl" aria-hidden>{community ? "✅" : "⚠️"}</span>
-          <h2>{s.verified} · {s.someone} {shortId(result.id)}</h2>
+        <div className={community ? "note ok verified" : "note warn"} role="status">
+          <strong>{s.verified} · {s.someone} {shortId(result.id)}</strong>
           <p>{community ? s.verifiedCommunity(community) : s.notCertified}</p>
         </div>
       ) : (
-        <div className="card center">
-          <QR value={appUrl(`/checkin/${challenge}`)} label={s.doorTitle} />
-          <p className="instruction">{s.doorHint}</p>
-          <p className="muted pulse">{s.waiting}</p>
-        </div>
+        <>
+          <p className="instruction center-text">{s.doorHint}</p>
+          <p className="muted pulse center-text">{s.waiting}</p>
+        </>
       )}
     </Screen>
   );
@@ -457,9 +513,9 @@ function CheckIn({ s, me, setMe, challenge }: Ctx & { challenge: Hex }) {
     });
   return (
     <Screen s={s} title={s.checkInTitle}>
-      <div className="card center">
+      <div className="sheet center">
         <p>{s.checkInBody}</p>
-        {done ? <p className="note ok">✅ {s.checkedIn}</p> : <button className="primary" disabled={busy} onClick={prove}>🙂 {s.signCheckIn}</button>}
+        {done ? <p className="note ok">{s.checkedIn}</p> : <button className="primary" disabled={busy} onClick={prove}>{s.signCheckIn}</button>}
         {error && <ErrorNote error={error === "wrong-person" ? s.needRegister : error} s={s} />}
       </div>
     </Screen>
@@ -470,31 +526,34 @@ function CheckIn({ s, me, setMe, challenge }: Ctx & { challenge: Hex }) {
 
 export default function App() {
   const route = useHashRoute();
-  const [lang, setLang] = useState<Lang>(() => readPref<Lang>("timebank.lang", detectLang()));
-  const [big, setBig] = useState(() => readPref<string>("timebank.big", "0") === "1");
+  const [lang, setLang] = useState<Lang>(() => (readPref("timebank.lang", detectLang()) as Lang));
+  const [big, setBig] = useState(() => readPref("timebank.big", "0") === "1");
+  const params = new URLSearchParams(window.location.search);
+  const phase = usePhase((params.get("phase") as Phase | null) ?? null);
   const [me, setMeState] = useState<Me | null>(loadMe);
   const s = strings[lang];
 
   useEffect(() => {
     document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
-    document.title = `${s.appName} · ${s.tagline}`;
-  }, [lang, s]);
+    document.title = lang === "zh" ? "时间银行 · timebank" : "timebank";
+  }, [lang]);
   useEffect(() => {
     document.documentElement.dataset.big = big ? "1" : "0";
-  }, [big]);
+    document.documentElement.dataset.phase = phase;
+  }, [big, phase]);
 
   const setMe = (m: Me) => {
     saveMe(m);
     setMeState(m);
   };
-  const ctx: Ctx = { s, lang, me, setMe };
+  const ctx: Ctx = { s, lang, phase, me, setMe };
 
   const [page, arg] = route;
   let body;
   // Links that work without a local identity: the helper may be on a new phone.
   if (page === "confirm" && arg) body = <Confirm {...ctx} raw={arg} />;
   else if (page === "checkin" && arg) body = <CheckIn {...ctx} challenge={arg as Hex} />;
-  else if (page === "door") body = <Door {...ctx} />;
+  else if (page === "door") body = <DoorCheck {...ctx} />;
   else if (!me) body = <Welcome {...ctx} />;
   else if (page === "code") body = <MyCode {...ctx} me={me} />;
   else if (page === "u" && arg) body = <Person {...ctx} id={arg as Hex} />;
@@ -507,11 +566,11 @@ export default function App() {
     <>
       <header className="topbar">
         <button className="brand-mini" onClick={() => go("/")} aria-label={s.home}>
-          <span className="seal-dot" aria-hidden>印</span> {s.appName}
+          <Wordmark size={22} />
         </button>
         <div className="prefs">
           <button className="chip" aria-pressed={big} onClick={() => { setBig(!big); writePref("timebank.big", big ? "0" : "1"); }}>
-            A+ {s.bigText}
+            {s.bigText}
           </button>
           <button className="chip" onClick={() => { const next = lang === "zh" ? "en" : "zh"; setLang(next); writePref("timebank.lang", next); }}>
             {s.language}
