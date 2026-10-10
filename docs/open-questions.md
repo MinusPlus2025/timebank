@@ -23,8 +23,8 @@
 - 需要用户在环境设置里放开网络（见 strategy.md「需要用户做的事」）。
 
 ## ASSUMPTION｜未验证的技术假设（实现前要对照 docs.monad.xyz）
-10. Monad testnet 出块约 400ms、最终性约 800ms，可以稳定支持“每秒一笔”交易的 Demo。
-11. Monad 支持 P256 预编译（RIP-7212），可以在合约里验证 WebAuthn/Passkey 签名。具体地址和 gas 待确认。
+10. ✅ 已验证：双方盖印交易在 Monad testnet 上 619 ms 确认。
+11. ✅ 已验证：P256 预编译（0x0100）在 Monad testnet 可用，真签名通过、假签名被拒；一次盖印（2 个签名）305,604 gas。
 12. testnet 水龙头额度足够支撑 Demo 期间的高频交易。
 13. 公共 RPC 的速率限制不会卡住每秒多笔交易（必要时用 Chainstack 等付费 RPC）。
 14. Monad 的 nonce / 交易打包机制允许同一个账户连续快速发送交易（否则要用多个 session key 轮流发）。

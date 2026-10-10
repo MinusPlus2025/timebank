@@ -21,7 +21,7 @@
 | GitHub | https://github.com/MinusPlus2025/monad-metropolis-2026 |
 | 在线 Demo | （待定） |
 | 演示视频 | （待定） |
-| 合约地址 | （待定） |
+| 合约地址 | Monad testnet `0x5CffF39486db8bD4FAd3826A7B19E92312A2949e` |
 | 提交页面 / 参赛后台 | https://hackathon.monad.xyz/dashboard （需要登录） |
 
 ## 素材
@@ -54,9 +54,11 @@
 - [x] 网页 App：中英双语、大字模式、生成式印章、转赠、匿名捐、开门验真
 - [x] 本地端到端测试通过（4 个虚拟刷脸设备：盖印 → 转赠 → 兑换 → 开门验真）
 - [x] README（含原创性披露、AI 工具披露）、MIT LICENSE、截图
-- [ ] **阻塞**：云端环境屏蔽 Monad RPC，无法部署 → 用户放开网络（`*.monad.xyz`）
-- [ ] 给部署地址 `0x0aD94e20F18104475Ccd2b596e968d51E5C30cc0` 领测试币
-- [ ] 部署合约到 Monad testnet，并在浏览器上验证
+- [x] 网络已放开（`*.monad.xyz`、`*.figma.com`）
+- [x] 部署地址已领 5 MON 测试币
+- [x] 合约已部署到 Monad testnet：`0x5CffF39486db8bD4FAd3826A7B19E92312A2949e`
+- [x] **实链验证**（scripts/smoke.js）：真人签名通过、冒充者被拒；双方盖印交易 619 ms 确认，gas 305,604（tx `0x354409724604ed053e27b9136e0b3366dc782ff890dfaba9e75416ae6c4d2277`）
+- [ ] 在区块浏览器上 verify 合约源码
 - [ ] Vercel 部署网页（用户注册 Vercel 并导入仓库；Claude 提供环境变量）
 - [ ] 用真实 iPhone / Android 测试刷脸流程（Safari、Chrome）
 - [ ] 录 Demo 视频（≤3 分钟）和 Pitch 视频（≤2 分钟，待确认）
