@@ -14,6 +14,23 @@
 
 ---
 
+## 团队现实（2026-10-10 确认）
+- 1 人，不写代码，没用过 Privy / Dynamic / Mera。
+- 所以：**Claude 写全部代码**；架构必须让用户几乎不需要碰命令行或调试。
+- 取舍原则：
+  - 合约越小越好（目标 1 个合约，100 行以内，带测试）
+  - 前端做成单页应用，部署到 Vercel，用户只需要点按钮导入仓库
+  - Demo 必须一个人能录：多用户场景用脚本模拟（视频里如实说明）
+  - 钱包 SDK 只用一家，而且要选“后台点几下就能拿到 App ID”的
+
+## 需要用户做的事（都不用写代码）
+1. **放开云端环境网络**：会话标题栏 → 云端环境 → Edit → Network access，选更宽的访问级别；或者在 Allowed domains 里加 `testnet-rpc.monad.xyz`、`*.monad.xyz`、`vercel.com`、`api.vercel.com` 等
+2. 在 Portal 注册、创建 Team 和 Project
+3. 注册钱包 SDK 后台（选定后给出图文步骤），把 App ID 发给 Claude
+4. 往 Claude 生成的部署地址领 Monad testnet 测试币（水龙头网页）
+5. 注册 Vercel（用 GitHub 登录），导入本仓库
+6. 按 Claude 写好的逐字稿录 Demo 和 Pitch 视频，然后提交
+
 ## A. 对比赛的理解
 
 1. **Monad 想听什么**：官方命题是“What becomes possible on Monad?”。所以评委的第一个问题大概率是：“这个东西放到以太坊 L2 或 Solana 上为什么不行或不够好？”。Monad 的卖点（ASSUMPTION，实现前要对照 docs.monad.xyz 核实）：
@@ -156,5 +173,5 @@ ASSUMPTION（我们的判断，用来指导取舍）：
 | E2 秒级预测 | 4 | 3 | 4 | 2 | 3 | 3 | **3.30** |
 | E5 微型保险 | 2 | 4 | 3 | 2 | 4 | 2 | **2.90** |
 
-**目前倾向（IDEA，未决定）**：E4（赛道 3）或 E1（赛道 2）。两者共用同一个底层：“嵌入式钱包 / Passkey 自动逐秒签名的链上微支付”，可以先花半天验证底层，再决定包装。
+**目前倾向（IDEA，未决定）**：E4（赛道 3）或 E1（赛道 2）。在“1 人、不写代码”的条件下，E2（预言机）和 E3（Passkey 验签）的调试风险会落到用户身上，降级为不推荐。两者共用同一个底层：“嵌入式钱包 / Passkey 自动逐秒签名的链上微支付”，可以先花半天验证底层，再决定包装。
 推荐的 Bounty 组合：Privy、Dynamic、Mera 三选一 + Envio + Crouton/Alchemy。
