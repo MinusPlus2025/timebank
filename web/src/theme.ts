@@ -8,12 +8,31 @@ export function currentPhase(date = new Date()): Phase {
   return h >= 6 && h < 18 ? "day" : "night";
 }
 
-export function usePhase(override: Phase | null): Phase {
-  const [phase, setPhase] = useState<Phase>(() => currentPhase());
+/** What the viewer chose: follow their clock (default), follow the phone's dark mode, or fix it. */
+export type ThemePref = "time" | "system" | "day" | "night";
+export const THEME_PREFS: ThemePref[] = ["time", "system", "day", "night"];
+
+const systemDark = () => typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches;
+
+function resolve(pref: ThemePref): Phase {
+  if (pref === "day" || pref === "night") return pref;
+  if (pref === "system") return systemDark() ? "night" : "day";
+  return currentPhase();
+}
+
+export function usePhase(pref: ThemePref, override: Phase | null): Phase {
+  const [phase, setPhase] = useState<Phase>(() => resolve(pref));
   useEffect(() => {
-    const t = setInterval(() => setPhase(currentPhase()), 60_000);
-    return () => clearInterval(t);
-  }, []);
+    setPhase(resolve(pref));
+    const t = setInterval(() => setPhase(resolve(pref)), 60_000);
+    const mq = window.matchMedia?.("(prefers-color-scheme: dark)");
+    const onChange = () => setPhase(resolve(pref));
+    mq?.addEventListener?.("change", onChange);
+    return () => {
+      clearInterval(t);
+      mq?.removeEventListener?.("change", onChange);
+    };
+  }, [pref]);
   return override ?? phase;
 }
 

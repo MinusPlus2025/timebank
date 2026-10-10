@@ -5,7 +5,7 @@ import type { Phase } from "./theme";
 import { Garland, PaperPlane, WindowTile, spring } from "./Windows";
 
 /** Scene 1: a block of windows, lights coming on one by one. */
-function Street({ phase }: { phase: Phase }) {
+export function Street({ phase }: { phase: Phase }) {
   const tiles = [7, 0, 8, 2, 4, 7, 3, 8, 1];
   return (
     <div className="onb-street">
