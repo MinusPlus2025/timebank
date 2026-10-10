@@ -21,6 +21,7 @@
 | 主赛道奖金 | 4 个赛道 × 3 名 × $10,000 |
 | 全场总冠军 | $30,000 |
 | 报名/官网 | monad.xyz/metropolis |
+| 参赛后台（用户提供） | https://hackathon.monad.xyz/dashboard （需要登录，Rules、提交表单和 Bounty 细则很可能都在这里） |
 
 ### 四个赛道（官方描述原意）
 1. **链上金融与交易**：高速结算环境下的新资产原语、市场和交易基础设施。示例：预测市场、Exotic Options、RWA、参数化保险。

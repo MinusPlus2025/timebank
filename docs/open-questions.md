@@ -10,7 +10,7 @@
 5. **环境**：有没有 Monad testnet 测试币和钱包？有没有 RPC（官方公共 RPC / Alchemy / QuickNode / Chainstack）？
 
 ## OPEN QUESTION｜需要核实的规则
-6. 官方 Rules 原文：评分标准是不是 5 × 20%？视频是不是最长 3 分钟？必须开源吗？截止时间是不是 11:59 PM ET？（当前环境访问不了 monad.xyz，需要你在浏览器里打开确认，或者把 Rules 截图 / 复制给我）
+6. 官方 Rules 原文：评分标准是不是 5 × 20%？视频是不是最长 3 分钟？必须开源吗？截止时间是不是 11:59 PM ET？（官方后台 https://hackathon.monad.xyz/dashboard 需要登录，而且当前云端环境的网络策略屏蔽了 monad.xyz 的所有域名。需要你登录后把 Rules、提交表单字段和 Bounty 列表截图或复制给我）
 7. 总冠军奖金是 $30k（官方中文文章）还是 $25k（二手来源）？
 8. 各 Sponsor Bounty 的要求和金额，特别是 Privy、Dynamic、MetaMask、Chainlink、Agora、Kimi、Alibaba Cloud。
 9. Bounty 能否和主赛道同时获奖？一个项目能报几个 Bounty？
