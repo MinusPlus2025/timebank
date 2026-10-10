@@ -5,12 +5,13 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { createPublicClient, createWalletClient, defineChain, http, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { timeBankAbi } from "../src/abi.js";
+import { DEPLOYED } from "../src/deployment.js";
 
-const ALLOWED = new Set(["register", "seal", "gift", "donate", "checkIn"]);
+const ALLOWED = new Set(["register", "seal", "gift", "donate", "checkIn", "registerDependent", "sealByGuardian", "visit"]);
 
 function clients() {
   const key = process.env.RELAYER_PRIVATE_KEY as Hex | undefined;
-  const address = process.env.TIMEBANK_ADDRESS as Hex | undefined;
+  const address = (DEPLOYED[Number(process.env.CHAIN_ID || 10143)] || process.env.TIMEBANK_ADDRESS) as Hex | undefined;
   if (!key || !address) throw new Error("Relayer is not configured");
   const chain = defineChain({
     id: Number(process.env.CHAIN_ID || 10143),

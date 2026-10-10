@@ -21,7 +21,7 @@
 | GitHub | https://github.com/MinusPlus2025/monad-metropolis-2026 |
 | 在线 Demo | https://monad-metropolis-2026.vercel.app/ |
 | 演示视频 | （待定） |
-| 合约地址 | Monad testnet `0x5CffF39486db8bD4FAd3826A7B19E92312A2949e` |
+| 合约地址 | Monad testnet `0x3AE397E6dc65F8918F8C6d264Dc459D6fa939Db5`（v2，加入守护人；v1 `0x5CffF39486db8bD4FAd3826A7B19E92312A2949e` 已停用） |
 | 提交页面 / 参赛后台 | https://hackathon.monad.xyz/dashboard （需要登录） |
 
 ## 素材
@@ -56,7 +56,7 @@
 - [x] README（含原创性披露、AI 工具披露）、MIT LICENSE、截图
 - [x] 网络已放开（`*.monad.xyz`、`*.figma.com`）
 - [x] 部署地址已领 5 MON 测试币
-- [x] 合约已部署到 Monad testnet：`0x5CffF39486db8bD4FAd3826A7B19E92312A2949e`
+- [x] 合约已部署到 Monad testnet：v2 `0x3AE397E6dc65F8918F8C6d264Dc459D6fa939Db5`（守护人、代确认、门口通知；测试网全流程 E2E 通过）
 - [x] **实链验证**（scripts/smoke.js）：真人签名通过、冒充者被拒；双方盖印交易 619 ms 确认，gas 305,604（tx `0x354409724604ed053e27b9136e0b3366dc782ff890dfaba9e75416ae6c4d2277`）
 - [ ] 在区块浏览器上 verify 合约源码
 - [x] Vercel 部署网页：https://monad-metropolis-2026.vercel.app/ （main 分支自动部署）

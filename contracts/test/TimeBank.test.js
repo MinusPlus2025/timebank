@@ -203,4 +203,75 @@ describe("TimeBank", () => {
       expect(ok).to.equal(false);
     });
   });
+
+  describe("guardian", () => {
+    async function dependentOf(guardianPk, guardianId) {
+      const digest = await bank.dependentDigest(guardianId);
+      await bank.registerDependent(guardianId, guardianPk.sign(digest));
+      return digest;
+    }
+
+    async function sealForDependent(helperPk, helperId, depId, guardianPk, minutes, redeem) {
+      const digest = await bank.sealDigest(helperId, depId, minutes, CARE, redeem);
+      return bank.sealByGuardian(helperId, depId, minutes, CARE, redeem, helperPk.sign(digest), guardianPk.sign(digest));
+    }
+
+    it("lets a daughter open an account for a parent without a phone and confirm help for them", async () => {
+      const dadId = await dependentOf(alice, aliceId);
+      expect(await bank.guardianOf(dadId)).to.equal(aliceId);
+
+      await sealHelp(alice, aliceId, bob, bobId, 120, CARE, false);
+      await bank.gift(aliceId, dadId, 60, alice.sign(await bank.giftDigest(aliceId, dadId, 60)));
+
+      // A volunteer visits dad; alice confirms remotely and dad's gifted hour pays for it.
+      await expect(sealForDependent(bob, bobId, dadId, alice, 60, true)).to.emit(bank, "ConfirmedByGuardian");
+      expect((await bank.members(dadId)).balance).to.equal(0);
+      expect((await bank.members(bobId)).balance).to.equal(60);
+    });
+
+    it("rejects confirmation by anyone but the guardian", async () => {
+      const dadId = await dependentOf(alice, aliceId);
+      await expect(sealForDependent(bob, bobId, dadId, mom, 60, false))
+        .to.be.revertedWithCustomError(bank, "BadSignature")
+        .withArgs(aliceId);
+    });
+
+    it("does not let the guardian be their own witness", async () => {
+      const dadId = await dependentOf(alice, aliceId);
+      await expect(sealForDependent(alice, aliceId, dadId, alice, 60, false)).to.be.revertedWithCustomError(
+        bank,
+        "SameMember"
+      );
+    });
+
+    it("rejects guardian sealing for members without a guardian", async () => {
+      await expect(sealForDependent(alice, aliceId, momId, bob, 60, false))
+        .to.be.revertedWithCustomError(bank, "NoGuardian")
+        .withArgs(momId);
+    });
+
+    it("lets a member choose a guardian with their own passkey", async () => {
+      const digest = await bank.guardianDigest(momId, aliceId);
+      await expect(bank.setGuardian(momId, aliceId, mom.sign(digest))).to.emit(bank, "GuardianSet").withArgs(momId, aliceId);
+      await expect(bank.setGuardian(momId, bobId, alice.sign(await bank.guardianDigest(momId, bobId))))
+        .to.be.revertedWithCustomError(bank, "BadSignature");
+      await expect(bank.connect(other).appointGuardian(momId, bobId)).to.be.revertedWithCustomError(bank, "NotSteward");
+    });
+
+    it("tells the guardian when a verified volunteer is at the door", async () => {
+      const community = ethers.encodeBytes32String("Sunrise Community");
+      await bank.certify(bobId, community);
+      const challenge = ethers.hexlify(ethers.randomBytes(32));
+      const digest = await bank.visitDigest(momId, challenge);
+      await expect(bank.visit(bobId, momId, challenge, bob.sign(digest)))
+        .to.emit(bank, "Visited")
+        .withArgs(momId, bobId, community)
+        .and.to.emit(bank, "PresenceVerified")
+        .withArgs(challenge, bobId, community);
+      await expect(bank.visit(bobId, momId, challenge, bob.sign(challenge))).to.be.revertedWithCustomError(
+        bank,
+        "BadSignature"
+      );
+    });
+  });
 });

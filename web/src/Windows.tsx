@@ -3,7 +3,7 @@
 // 0 volunteer helping an elder with a phone · 1 bringing soup · 2 reading with a child
 // 3 fixing a lamp · 4 tea, one neighbour in a wheelchair · 5 grandmother with a cat (family)
 // 6 young person waving (you) · 7 empty window, plant (dark at night) · 8 empty window (dark)
-import { useEffect, type CSSProperties, type ReactNode } from "react";
+import { Children, isValidElement, useEffect, type CSSProperties, type ReactNode } from "react";
 import { animate, motion, useMotionValue, useTransform, type Variants } from "framer-motion";
 import { illustrationPack, type Phase } from "./theme";
 
@@ -89,13 +89,13 @@ const rowItem: Variants = {
 };
 
 /** The building front: a roofline, then windows that rise into place one after another. */
-export function Facade({ children }: { children: ReactNode[] }) {
+export function Facade({ children }: { children: ReactNode }) {
   return (
     <motion.section className="facade" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={soft}>
       <motion.div className="cornice" aria-hidden initial={{ scaleX: 0 }} animate={{ scaleX: 1 }} transition={{ ...soft, delay: 0.05 }} />
       <motion.div className="facade-grid" variants={facadeVariants} initial="hidden" animate="show">
-        {children.map((child, i) => (
-          <motion.div key={i} variants={rowItem}>
+        {Children.toArray(children).map((child, i) => (
+          <motion.div key={isValidElement(child) && child.key != null ? child.key : i} variants={rowItem}>
             {child}
           </motion.div>
         ))}

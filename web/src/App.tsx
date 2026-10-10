@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import { hexToString, toHex, type Hex } from "viem";
 import { CATEGORIES, detectLang, formatHours, formatMinutes, strings, type Lang, type Strings } from "./i18n";
-import { idOf, loadMe, saveMe, shortId, encodeSealPayload, decodeSealPayload, type Me, type SealPayload } from "./identity";
+import { idOf, loadMe, saveMe, shortId, encodeSealPayload, decodeSealPayload, loadFamily, addFamily, type Me, type SealPayload } from "./identity";
 import { createPasskey, passkeysSupported, signWithPasskey } from "./passkey";
 import * as chain from "./chain";
 import { stampFeedback } from "./feedback";
@@ -46,7 +46,7 @@ function writePref(key: string, value: string) {
   }
 }
 
-type Ctx = { s: Strings; lang: Lang; phase: Phase; me: Me | null; setMe: (m: Me) => void };
+type Ctx = { s: Strings; lang: Lang; phase: Phase; me: Me | null; setMe: (m: Me) => void; elder: boolean };
 
 const tileFor = (category: number) => CATEGORIES.find((c) => c.id === category)?.tile ?? 4;
 
@@ -151,7 +151,90 @@ function Welcome({ s, phase, setMe }: Ctx) {
   );
 }
 
+const familyName = (id: Hex, s: Strings) => loadFamily().find((f) => f.id === id)?.name || `${s.someone} ${shortId(id)}`;
+const communityName = (c: Hex) => (BigInt(c) !== 0n ? hexToString(c, { size: 32 }).replace(/\0/g, "") : "");
+
+/** Watches for verified visitors at the doors of the family this device looks after. */
+function useFamilyVisits(s: Strings) {
+  const [notice, setNotice] = useState("");
+  useEffect(() => {
+    const hosts = loadFamily().map((f) => f.id);
+    if (!hosts.length) return;
+    let stop = false;
+    let from: bigint | null = null;
+    const tick = async () => {
+      try {
+        from ??= (await chain.client.getBlockNumber()) - 5n;
+        const visits = await chain.findVisits(hosts, from);
+        const last = visits[visits.length - 1];
+        if (last && !stop) {
+          from = last.block + 1n;
+          const text = s.familyVisit(shortId(last.visitor), familyName(last.host, s), communityName(last.community));
+          setNotice(text);
+          speak(text);
+          stampFeedback();
+        }
+      } catch {
+        /* keep polling */
+      }
+      if (!stop) setTimeout(tick, 2000);
+    };
+    tick();
+    return () => {
+      stop = true;
+    };
+  }, [s]);
+  return notice;
+}
+
+function VisitNotice({ s, text }: { s: Strings; text: string }) {
+  return (
+    <AnimatePresence>
+      {text && (
+        <motion.div className="note ok visit-notice" role="status" initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={spring}>
+          <strong>{s.familyVisitTitle}</strong>
+          <p>{text}</p>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+/** Simple mode: one number and three large buttons, read aloud. */
+function ElderHome({ s, phase, me }: Ctx & { me: Me }) {
+  const [member, setMember] = useState<chain.Member | null>(null);
+  const visit = useFamilyVisits(s);
+  useEffect(() => {
+    chain.getMember(me.id).then(setMember).catch(() => undefined);
+  }, [me.id]);
+  useSpeakOnShow(member && s.elderSpoken(formatMinutes(member.balance, s)));
+  const buttons = [
+    { label: s.elderHelped, path: "/scan", tile: 4 },
+    { label: s.elderDoor, path: "/door", tile: 0 },
+    { label: s.elderCode, path: "/code", tile: TILE.you },
+  ];
+  return (
+    <main className="elder-home">
+      <h1>{s.elderGreeting(me.name)}</h1>
+      <p className="elder-balance">
+        <span>{s.elderBalance}</span>
+        <strong>{member ? formatMinutes(member.balance, s) : "…"}</strong>
+      </p>
+      <VisitNotice s={s} text={visit} />
+      <nav className="elder-buttons">
+        {buttons.map((b) => (
+          <motion.button key={b.path} whileTap={{ scale: 0.97 }} className="elder-btn" onClick={() => { speak(b.label); go(b.path); }}>
+            <span className="elder-btn-art"><WindowTile phase={phase} tile={b.tile} /></span>
+            {b.label}
+          </motion.button>
+        ))}
+      </nav>
+    </main>
+  );
+}
+
 function Home({ s, lang, phase, me }: Ctx & { me: Me }) {
+  const visit = useFamilyVisits(s);
   const [member, setMember] = useState<chain.Member | null>(null);
   const [seals, setSeals] = useState<chain.SealRecord[]>([]);
   const [open, setOpen] = useState<chain.SealRecord | null>(null);
@@ -186,9 +269,11 @@ function Home({ s, lang, phase, me }: Ctx & { me: Me }) {
           </span>
           <span className="sky-links">
             <button className="link" onClick={() => go("/door")}>{s.door}</button>
-            {!!member?.balance && <button className="link" onClick={() => go("/donate")}>{s.donate}</button>}
+            <button className="link" onClick={() => go("/family")}>{s.familyShort}</button>
+            {!!member?.balance && <button className="link" onClick={() => go("/donate")}>{s.donateShort}</button>}
           </span>
         </div>
+        <VisitNotice s={s} text={visit} />
         <nav className="dock">
           <motion.button whileTap={{ scale: 0.96 }} className="dock-btn main" onClick={() => go("/code")}>
             {s.helpedOthers}
@@ -320,6 +405,37 @@ function Person({ s, phase, me, id }: Ctx & { id: Hex }) {
         <p className="instruction">{s.ownCode}</p>
       </Screen>
     );
+  return <PersonActions s={s} phase={phase} me={me} id={id} />;
+}
+
+function PersonActions({ s, phase, me, id }: { s: Strings; phase: Phase; me: Me | null; id: Hex }) {
+  const [guarded, setGuarded] = useState(false);
+  const [atDoor, setAtDoor] = useState(false);
+  const { busy, error, run } = useAsync();
+  useEffect(() => {
+    chain.getGuardian(id).then((g) => setGuarded(chain.hasGuardian(g))).catch(() => undefined);
+  }, [id]);
+  const arrive = () =>
+    run(async () => {
+      if (!me) throw new Error("wrong-person");
+      const challenge = toHex(crypto.getRandomValues(new Uint8Array(32)));
+      const { assertion } = await signAs(await chain.visitDigest(id, challenge), me.id);
+      await chain.relay("visit", [me.id, id, challenge, chain.toArgs(assertion)]);
+      setAtDoor(true);
+    });
+  if (guarded)
+    return (
+      <Screen s={s} title={familyName(id, s)} onBack={() => go("/")}>
+        <div className="person-window"><WindowTile phase={phase} tile={TILE.family} /></div>
+        <p className="muted center-text">{s.guardianNote}</p>
+        <div className="stack">
+          {atDoor ? <p className="note ok">{s.atDoorDone}</p> : <button className="primary" disabled={busy} onClick={arrive}>{s.atDoor}</button>}
+          <button className="secondary" onClick={() => go(`/helped/${id}`)}>{s.helpedThem}</button>
+          <button className="link" onClick={() => go(`/gift/${id}`)}>{s.giftTo}</button>
+        </div>
+        {error && <ErrorNote error={error === "wrong-person" ? s.needRegister : error} s={s} />}
+      </Screen>
+    );
   return (
     <Screen s={s} title={`${s.someone} ${shortId(id)}`} onBack={() => go("/")}>
       <div className="person-window"><WindowTile phase={phase} tile={TILE.unlit[0]} lit={false} /></div>
@@ -347,6 +463,36 @@ function Choice({ options, value, onChange, render }: { options: readonly number
 }
 
 const shortMinutes = (m: number, s: Strings) => (m % 60 === 0 || m < 60 ? formatMinutes(m, s) : `${(m / 60).toFixed(1)} ${s.hoursUnit}`);
+
+function CategoryPicker({ phase, lang, value: category, onChange: setCategory }: { phase: Phase; lang: Lang; value: number; onChange: (c: number) => void }) {
+  return (
+    <div className="categories">
+        {CATEGORIES.map((c) => (
+          <motion.button
+            key={c.id}
+            className={c.id === category ? "category on" : "category"}
+            aria-pressed={c.id === category}
+            onClick={() => setCategory(c.id)}
+            whileTap={{ scale: 0.95 }}
+            transition={spring}
+          >
+            <motion.span
+              className="category-art"
+              animate={{ scale: c.id === category ? 1.06 : 0.94, opacity: c.id === category ? 1 : 0.55, filter: c.id === category ? "grayscale(0)" : "grayscale(0.7)" }}
+              transition={spring}
+            >
+              {c.id === category && <motion.span layoutId="category-glow" className="category-glow" transition={spring} />}
+              <WindowTile phase={phase} tile={c.tile} />
+            </motion.span>
+            <span>{c[lang]}</span>
+            <span className="category-dot" aria-hidden>
+              {c.id === category && <motion.span layoutId="category-dot" className="category-dot-on" transition={spring} />}
+            </span>
+          </motion.button>
+        ))}
+      </div>
+  );
+}
 
 function Thank({ s, lang, phase, me, helper }: Ctx & { me: Me; helper: Hex }) {
   const [category, setCategory] = useState(1);
@@ -385,31 +531,7 @@ function Thank({ s, lang, phase, me, helper }: Ctx & { me: Me; helper: Hex }) {
   return (
     <Screen s={s} title={s.thankTitle} onBack={() => go("/")}>
       <h2>{s.whatHelp}</h2>
-      <div className="categories">
-        {CATEGORIES.map((c) => (
-          <motion.button
-            key={c.id}
-            className={c.id === category ? "category on" : "category"}
-            aria-pressed={c.id === category}
-            onClick={() => setCategory(c.id)}
-            whileTap={{ scale: 0.95 }}
-            transition={spring}
-          >
-            <motion.span
-              className="category-art"
-              animate={{ scale: c.id === category ? 1.06 : 0.94, opacity: c.id === category ? 1 : 0.55, filter: c.id === category ? "grayscale(0)" : "grayscale(0.7)" }}
-              transition={spring}
-            >
-              {c.id === category && <motion.span layoutId="category-glow" className="category-glow" transition={spring} />}
-              <WindowTile phase={phase} tile={c.tile} />
-            </motion.span>
-            <span>{c[lang]}</span>
-            <span className="category-dot" aria-hidden>
-              {c.id === category && <motion.span layoutId="category-dot" className="category-dot-on" transition={spring} />}
-            </span>
-          </motion.button>
-        ))}
-      </div>
+      <CategoryPicker phase={phase} lang={lang} value={category} onChange={setCategory} />
       <h2>{s.howLong}</h2>
       <Choice options={[30, 60, 90, 120]} value={minutes} onChange={setMinutes} render={(m) => shortMinutes(m, s)} />
       <label className="toggle">
@@ -578,7 +700,7 @@ function Donate({ s, me }: Ctx & { me: Me }) {
   );
 }
 
-function DoorCheck({ s, phase }: Ctx) {
+function DoorCheck({ s, phase, me }: Ctx) {
   const [challenge] = useState(() => toHex(crypto.getRandomValues(new Uint8Array(32))));
   const [result, setResult] = useState<{ id: Hex; community: Hex } | null>(null);
   useEffect(() => {
@@ -614,7 +736,7 @@ function DoorCheck({ s, phase }: Ctx) {
         </Door>
       ) : (
         <div className="sheet center door-qr">
-          <QR value={appUrl(`/checkin/${challenge}`)} label={s.doorTitle} />
+          <QR value={appUrl(me ? `/checkin/${challenge}/${me.id}` : `/checkin/${challenge}`)} label={s.doorTitle} />
         </div>
       )}
       {result ? (
@@ -632,15 +754,23 @@ function DoorCheck({ s, phase }: Ctx) {
   );
 }
 
-function CheckIn({ s, me, setMe, challenge }: Ctx & { challenge: Hex }) {
+function CheckIn({ s, me, setMe, challenge, host }: Ctx & { challenge: Hex; host?: Hex }) {
   const [done, setDone] = useState(false);
   const { busy, error, run } = useAsync();
   useSpeakOnShow(done ? s.checkedIn : `${s.checkInTitle}。${s.checkInBody}`);
   const prove = () =>
     run(async () => {
-      const r = await signAs(challenge, me?.id);
-      if (!me) setMe({ id: r.id, x: r.x, y: r.y, name: "" });
-      await chain.relay("checkIn", [r.id, challenge, chain.toArgs(r.assertion)]);
+      if (host) {
+        // Signing which door we're at needs to know who we are first.
+        const who = me ?? (await signAs(toHex(crypto.getRandomValues(new Uint8Array(32)))));
+        if (!me) setMe({ id: who.id, x: who.x, y: who.y, name: "" });
+        const r = await signAs(await chain.visitDigest(host, challenge), who.id);
+        await chain.relay("visit", [r.id, host, challenge, chain.toArgs(r.assertion)]);
+      } else {
+        const r = await signAs(challenge, me?.id);
+        if (!me) setMe({ id: r.id, x: r.x, y: r.y, name: "" });
+        await chain.relay("checkIn", [r.id, challenge, chain.toArgs(r.assertion)]);
+      }
       setDone(true);
     });
   return (
@@ -649,6 +779,177 @@ function CheckIn({ s, me, setMe, challenge }: Ctx & { challenge: Hex }) {
         <p>{s.checkInBody}</p>
         {done ? <p className="note ok">{s.checkedIn}</p> : <button className="primary" disabled={busy} onClick={prove}>{s.signCheckIn}</button>}
         {error && <ErrorNote error={error === "wrong-person" ? s.needRegister : error} s={s} />}
+      </div>
+    </Screen>
+  );
+}
+
+/** A helper at the home of someone looked after by family: they sign first, the guardian confirms. */
+function HelpedFor({ s, lang, phase, me, receiver }: Ctx & { me: Me; receiver: Hex }) {
+  const [category, setCategory] = useState(1);
+  const [minutes, setMinutes] = useState(60);
+  const [balance, setBalance] = useState(0);
+  const [payload, setPayload] = useState("");
+  const { busy, error, run } = useAsync();
+  useEffect(() => {
+    chain.getMember(receiver).then((m) => setBalance(m.balance)).catch(() => undefined);
+  }, [receiver]);
+  const redeem = balance >= minutes;
+  const sign = () =>
+    run(async () => {
+      const digest = await chain.sealDigest(me.id, receiver, minutes, category, redeem);
+      const { assertion } = await signAs(digest, me.id);
+      setPayload(encodeSealPayload({ h: me.id, r: receiver, m: minutes, c: category, d: redeem, a: assertion }));
+    });
+  useSpeakOnShow(payload ? s.askGuardianHint : s.whatHelp);
+  if (payload) {
+    const url = appUrl(`/witness/${payload}`);
+    return (
+      <Screen s={s} title={s.askGuardian} onBack={() => setPayload("")}>
+        <div className="sheet center">
+          <QR value={url} label={s.askGuardian} />
+          <p className="instruction">{s.askGuardianHint}</p>
+          <CopyLink url={url} s={s} />
+        </div>
+      </Screen>
+    );
+  }
+  return (
+    <Screen s={s} title={s.helpedThem} onBack={() => go(`/u/${receiver}`)}>
+      <h2>{s.whatHelp}</h2>
+      <CategoryPicker phase={phase} lang={lang} value={category} onChange={setCategory} />
+      <h2>{s.howLong}</h2>
+      <Choice options={[30, 60, 90, 120]} value={minutes} onChange={setMinutes} render={(m) => shortMinutes(m, s)} />
+      {redeem && <p className="muted">{s.useFamilyHours(formatMinutes(balance, s))}</p>}
+      <button className="primary" disabled={busy} onClick={sign}>{s.signAsHelper}</button>
+      {error && <ErrorNote error={error} s={s} />}
+    </Screen>
+  );
+}
+
+/** The guardian confirms, from anywhere, the help their relative received. */
+function Witness({ s, lang, phase, me, raw }: Ctx & { me: Me; raw: string }) {
+  const p = useMemo(() => {
+    try {
+      return decodeSealPayload(raw);
+    } catch {
+      return null;
+    }
+  }, [raw]);
+  const [done, setDone] = useState<Hex | null>(null);
+  const [seconds, setSeconds] = useState("");
+  const { busy, error, run } = useAsync();
+  const cat = CATEGORIES.find((c) => c.id === p?.c) ?? CATEGORIES[0];
+  useSpeakOnShow(p && (done ? s.sealed : s.witnessBody(shortId(p.h), familyName(p.r, s), cat[lang], formatMinutes(p.m, s))));
+  if (!p) return <Screen s={s}><ErrorNote error="bad link" s={s} /></Screen>;
+
+  const confirm = () =>
+    run(async () => {
+      if ((await chain.getGuardian(p.r)) !== me.id) throw new Error(s.notGuardian);
+      const digest = await chain.sealDigest(p.h, p.r, p.m, p.c, p.d);
+      const guardian = await signAs(digest, me.id);
+      const t0 = performance.now();
+      const { hash } = await chain.relay("sealByGuardian", [p.h, p.r, p.m, p.c, p.d, chain.toArgs(p.a), chain.toArgs(guardian.assertion)]);
+      setSeconds(((performance.now() - t0) / 1000).toFixed(1));
+      setDone(hash);
+      setTimeout(stampFeedback, 900);
+    });
+
+  if (done)
+    return (
+      <Screen s={s}>
+        <div className="center celebrate">
+          <Garland phase={phase} left={TILE.family} right={cat.tile} />
+          <h1>{s.sealed}</h1>
+          <Receipt s={s} hash={done} seconds={seconds} />
+          <button className="secondary" onClick={() => go("/")}>{s.home}</button>
+        </div>
+      </Screen>
+    );
+  return (
+    <Screen s={s} title={s.witnessTitle}>
+      <div className="sheet center">
+        <WindowTile phase={phase} tile={cat.tile} />
+        <p className="instruction">{s.witnessBody(shortId(p.h), familyName(p.r, s), cat[lang], formatMinutes(p.m, s))}</p>
+        {p.d && <p className="muted small">{s.witnessPays}</p>}
+        <button className="primary" disabled={busy} onClick={confirm}>{busy ? s.sealing : s.signWitness}</button>
+        {error && <ErrorNote error={error === "wrong-person" ? s.notGuardian : error} s={s} />}
+      </div>
+    </Screen>
+  );
+}
+
+function Family({ s, phase }: Ctx & { me: Me }) {
+  const [family] = useState(loadFamily);
+  const [balances, setBalances] = useState<Record<string, number>>({});
+  const visit = useFamilyVisits(s);
+  useEffect(() => {
+    family.forEach((f) => chain.getMember(f.id).then((m) => setBalances((b) => ({ ...b, [f.id]: m.balance }))).catch(() => undefined));
+  }, [family]);
+  useSpeakOnShow(`${s.family}。${s.familyHint}`);
+  return (
+    <Screen s={s} title={s.family} onBack={() => go("/")}>
+      <p className="muted">{s.familyHint}</p>
+      <VisitNotice s={s} text={visit} />
+      <ul className="family-list">
+        {family.map((f) => (
+          <li key={f.id}>
+            <span className="family-art"><WindowTile phase={phase} tile={TILE.family} /></span>
+            <span className="family-name">
+              <strong>{f.name}</strong>
+              <small>{s.available} {formatMinutes(balances[f.id] ?? 0, s)}</small>
+            </span>
+            <span className="family-actions">
+              <button className="link" onClick={() => go(`/gift/${f.id}`)}>{s.giftTo}</button>
+              <button className="link" onClick={() => go(`/card/${f.id}`)}>{s.familyCard}</button>
+            </span>
+          </li>
+        ))}
+      </ul>
+      <button className="primary" onClick={() => go("/family/new")}>{s.addFamily}</button>
+    </Screen>
+  );
+}
+
+function FamilyNew({ s, phase, me }: Ctx & { me: Me }) {
+  const [name, setName] = useState("");
+  const { busy, error, run } = useAsync();
+  const create = () =>
+    run(async () => {
+      const id = await chain.dependentDigest(me.id);
+      const { assertion } = await signAs(id, me.id);
+      await chain.relay("registerDependent", [me.id, chain.toArgs(assertion)]);
+      addFamily({ id, name: name.trim() || shortId(id) });
+      stampFeedback();
+      go(`/card/${id}`);
+    });
+  return (
+    <Screen s={s} title={s.addFamily} onBack={() => go("/family")}>
+      <div className="gift-head"><WindowTile phase={phase} tile={TILE.family} lit={false} /></div>
+      <label className="field">
+        <span>{s.familyName}</span>
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder={s.familyNamePlaceholder} maxLength={20} />
+        <small>{s.nameHint}</small>
+      </label>
+      <button className="primary" disabled={busy} onClick={create}>{busy ? s.creating : s.familyCreate}</button>
+      {error && <ErrorNote error={error} s={s} />}
+    </Screen>
+  );
+}
+
+function FamilyCard({ s, phase, id }: Ctx & { id: Hex }) {
+  const name = familyName(id, s);
+  useSpeakOnShow(`${s.familyCard}。${s.familyCardHint}`);
+  return (
+    <Screen s={s} title={s.familyCard} onBack={() => go("/family")}>
+      <div className="sheet center family-card">
+        <h2>{name}</h2>
+        <div className="qr-frame">
+          <QR value={appUrl(`/u/${id}`)} label={name} />
+          <span className="qr-badge"><WindowTile phase={phase} tile={TILE.family} /></span>
+        </div>
+        <p className="muted">{s.familyCardHint}</p>
+        <button className="secondary no-print" onClick={() => window.print()}>{s.print}</button>
       </div>
     </Screen>
   );
@@ -680,13 +981,13 @@ export default function App() {
     saveMe(m);
     setMeState(m);
   };
-  const ctx: Ctx = { s, lang, phase, me, setMe };
+  const ctx: Ctx = { s, lang, phase, me, setMe, elder: big };
 
-  const [page, arg] = route;
+  const [page, arg, arg2] = route;
   let body;
   // Links that work without a local identity: the helper may be on a new phone.
   if (page === "confirm" && arg) body = <Confirm {...ctx} raw={arg} />;
-  else if (page === "checkin" && arg) body = <CheckIn {...ctx} challenge={arg as Hex} />;
+  else if (page === "checkin" && arg) body = <CheckIn {...ctx} challenge={arg as Hex} host={arg2 as Hex | undefined} />;
   else if (page === "door") body = <DoorCheck {...ctx} />;
   else if (page === "demo" && arg) body = <DemoScene {...ctx} which={arg} />;
   else if (!me) body = <Welcome {...ctx} />;
@@ -696,6 +997,12 @@ export default function App() {
   else if (page === "thank" && arg) body = <Thank {...ctx} me={me} helper={arg as Hex} />;
   else if (page === "gift" && arg) body = <Gift {...ctx} me={me} to={arg as Hex} />;
   else if (page === "donate") body = <Donate {...ctx} me={me} />;
+  else if (page === "helped" && arg) body = <HelpedFor {...ctx} me={me} receiver={arg as Hex} />;
+  else if (page === "witness" && arg) body = <Witness {...ctx} me={me} raw={arg} />;
+  else if (page === "family" && arg === "new") body = <FamilyNew {...ctx} me={me} />;
+  else if (page === "family") body = <Family {...ctx} me={me} />;
+  else if (page === "card" && arg) body = <FamilyCard {...ctx} id={arg as Hex} />;
+  else if (big) body = <ElderHome {...ctx} me={me} />;
   else body = <Home {...ctx} me={me} />;
 
   return (
@@ -723,8 +1030,24 @@ export default function App() {
               <span aria-hidden>{voice ? "🔊" : "🔈"}</span> {s.voice}
             </button>
           )}
-          <button className="chip" aria-pressed={big} onClick={() => { setBig(!big); writePref("timebank.big", big ? "0" : "1"); }}>
-            {s.bigText}
+          <button
+            className="chip"
+            aria-pressed={big}
+            onClick={() => {
+              const next = !big;
+              setBig(next);
+              writePref("timebank.big", next ? "1" : "0");
+              // Simple mode reads every screen aloud; the tap itself unlocks speech on iOS.
+              if (next && voiceSupported()) {
+                setVoice(true);
+                writePref("timebank.voice", "1");
+                configureVoice(true, lang);
+                unlockVoice();
+                speak(s.voiceOn);
+              }
+            }}
+          >
+            {s.elderMode}
           </button>
           <button className="chip" onClick={() => { const next = lang === "zh" ? "en" : "zh"; setLang(next); writePref("timebank.lang", next); }}>
             {s.language}

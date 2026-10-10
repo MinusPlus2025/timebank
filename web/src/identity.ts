@@ -72,3 +72,23 @@ export function decodeSealPayload(s: string): SealPayload {
   const clientDataSuffix = new TextDecoder().decode(b.slice(i));
   return { h, r, m: (m1 << 8) | m2, c, d: d === 1, a: { authenticatorData, clientDataSuffix, r: sigR, s: sigS } };
 }
+
+// Relatives this device looks after as guardian. Names stay local, like the user's own name.
+export type FamilyMember = { id: Hex; name: string };
+const FAMILY_KEY = "timebank.family";
+
+export function loadFamily(): FamilyMember[] {
+  try {
+    return JSON.parse(localStorage.getItem(FAMILY_KEY) || "[]") as FamilyMember[];
+  } catch {
+    return [];
+  }
+}
+
+export function addFamily(f: FamilyMember) {
+  try {
+    localStorage.setItem(FAMILY_KEY, JSON.stringify([...loadFamily().filter((x) => x.id !== f.id), f]));
+  } catch {
+    /* private mode: the account still exists on-chain */
+  }
+}
