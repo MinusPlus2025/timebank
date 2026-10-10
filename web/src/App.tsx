@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import { hexToString, toHex, type Hex } from "viem";
 import { CATEGORIES, detectLang, formatHours, formatMinutes, strings, type Lang, type Strings } from "./i18n";
 import { idOf, loadMe, saveMe, shortId, encodeSealPayload, decodeSealPayload, type Me, type SealPayload } from "./identity";
@@ -8,7 +9,7 @@ import { stampFeedback } from "./feedback";
 import { CopyLink, ErrorNote, QR, Screen, errorMessage } from "./ui";
 import { usePhase, type Phase } from "./theme";
 import { Wordmark } from "./Brand";
-import { Door, Facade, Garland, PaperPlane, TILE, WindowTile } from "./Windows";
+import { CountUp, Door, Facade, Garland, PaperPlane, TILE, WindowTile, spring } from "./Windows";
 import { Onboarding } from "./Onboarding";
 import { configureVoice, speak, useSpeakOnShow, voiceSupported } from "./voice";
 
@@ -173,7 +174,7 @@ function Home({ s, lang, phase, me }: Ctx & { me: Me }) {
           {me.name ? `${lang === "zh" ? "，" : ", "}${me.name}` : ""}
         </p>
         <div className="headline">
-          <b>{formatHours(given)}</b>
+          <CountUp value={given} format={(v) => formatHours(Math.round(v))} />
           <span>
             {s.litHeadline}
             <small>{s.litSub}</small>
@@ -183,34 +184,64 @@ function Home({ s, lang, phase, me }: Ctx & { me: Me }) {
           <span>
             {s.available} <strong>{member ? formatMinutes(member.balance, s) : "…"}</strong>
           </span>
-          {!!member?.balance && (
-            <button className="link" onClick={() => go("/donate")}>{s.donate}</button>
-          )}
+          <span className="sky-links">
+            <button className="link" onClick={() => go("/door")}>{s.door}</button>
+            {!!member?.balance && <button className="link" onClick={() => go("/donate")}>{s.donate}</button>}
+          </span>
         </div>
         <nav className="dock">
-          <button className="dock-btn main" onClick={() => go("/code")}>{s.myCode}</button>
-          <button className="dock-btn" onClick={() => go("/door")}>{s.door}</button>
+          <motion.button whileTap={{ scale: 0.96 }} className="dock-btn main" onClick={() => go("/code")}>
+            {s.helpedOthers}
+            <small>{s.helpedOthersSub}</small>
+          </motion.button>
+          <motion.button whileTap={{ scale: 0.96 }} className="dock-btn" onClick={() => go("/scan")}>
+            {s.othersHelped}
+            <small>{s.othersHelpedSub}</small>
+          </motion.button>
         </nav>
       </header>
+      {seals.length === 0 && (
+        <motion.section className="how" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ ...spring, delay: 0.3 }}>
+          <h2>{s.howTitle}</h2>
+          <ol>
+            {s.howSteps.map((step, i) => (
+              <motion.li key={i} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ ...spring, delay: 0.45 + i * 0.12 }}>
+                <span className="step-num">{i + 1}</span>
+                {step}
+              </motion.li>
+            ))}
+          </ol>
+        </motion.section>
+      )}
       <Facade>
         <WindowTile phase={phase} tile={TILE.you} label={s.yourWindow} onClick={() => go("/code")} />
-        {seals.map((seal) => (
+        {seals.map((seal, i) => (
           <WindowTile
             key={seal.id}
             phase={phase}
             tile={tileFor(seal.category)}
             label={CATEGORIES.find((c) => c.id === seal.category)?.[lang]}
             onClick={() => setOpen(seal)}
+            layoutId={`seal-${seal.id}`}
+            lightAt={0.7 + i * 0.18}
           />
         ))}
         {Array.from({ length: unlit }, (_, i) => (
           <WindowTile key={`u${i}`} phase={phase} tile={TILE.unlit[i % 2]} lit={false} />
         ))}
       </Facade>
+      <AnimatePresence>
       {open && (
-        <div className="overlay" onClick={() => setOpen(null)}>
-          <div className="sheet window-detail" onClick={(e) => e.stopPropagation()}>
-            <WindowTile phase={phase} tile={tileFor(open.category)} fresh />
+        <motion.div className="overlay" onClick={() => setOpen(null)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+          <motion.div
+            className="sheet window-detail"
+            onClick={(e) => e.stopPropagation()}
+            initial={{ y: 60, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 60, opacity: 0 }}
+            transition={spring}
+          >
+            <WindowTile phase={phase} tile={tileFor(open.category)} layoutId={`seal-${open.id}`} />
             <h2>
               {CATEGORIES.find((c) => c.id === open.category)?.[lang]} · {formatMinutes(open.minutes, s)}
             </h2>
@@ -222,9 +253,10 @@ function Home({ s, lang, phase, me }: Ctx & { me: Me }) {
               {s.onChain} ↗
             </a>
             <button className="secondary" onClick={() => setOpen(null)}>{s.close}</button>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
+      </AnimatePresence>
     </main>
   );
 }
@@ -242,6 +274,40 @@ function MyCode({ s, phase, me }: Ctx & { me: Me }) {
         <p className="muted">{s.myCodeHint}</p>
         <CopyLink url={url} s={s} />
       </div>
+    </Screen>
+  );
+}
+
+/** Standalone scenes for recording the demo video: #/demo/street | garland | plane | door */
+function DemoScene({ phase, which }: Ctx & { which: string }) {
+  const tiles = [6, 0, 7, 2, 4, 8, 3, 7];
+  return (
+    <main className="demo-scene">
+      {which === "street" && (
+        <Facade>
+          {tiles.map((t, i) => (
+            <WindowTile key={i} phase={phase} tile={t} lit={t < 7} lightAt={t < 7 && t !== 6 ? 0.8 + i * 0.25 : undefined} />
+          ))}
+        </Facade>
+      )}
+      {which === "garland" && <Garland phase={phase} left={TILE.you} right={3} />}
+      {which === "plane" && <PaperPlane phase={phase} />}
+      {which === "door" && (
+        <Door open>
+          <WindowTile phase={phase} tile={0} lightAt={0.4} />
+        </Door>
+      )}
+    </main>
+  );
+}
+
+function ScanHelp({ s, phase }: Ctx) {
+  useSpeakOnShow(`${s.scanTitle}${s.scanBody}`);
+  return (
+    <Screen s={s} title={s.scanTitle} onBack={() => go("/")}>
+      <div className="person-window"><WindowTile phase={phase} tile={4} lightAt={0.3} /></div>
+      <p className="instruction">{s.scanBody}</p>
+      <p className="muted">{s.scanCopy}</p>
     </Screen>
   );
 }
@@ -494,9 +560,15 @@ function DoorCheck({ s, phase }: Ctx) {
   useSpeakOnShow(result ? `${s.verified}。${community ? s.verifiedCommunity(community) : s.notCertified}` : `${s.doorTitle}。${s.doorHint}`);
   return (
     <Screen s={s} title={s.doorTitle} onBack={() => go("/")}>
-      <Door open={!!result}>
-        {result ? <WindowTile phase={phase} tile={0} /> : <QR value={appUrl(`/checkin/${challenge}`)} label={s.doorTitle} />}
-      </Door>
+      {result ? (
+        <Door open>
+          <WindowTile phase={phase} tile={0} lightAt={0.4} />
+        </Door>
+      ) : (
+        <div className="sheet center door-qr">
+          <QR value={appUrl(`/checkin/${challenge}`)} label={s.doorTitle} />
+        </div>
+      )}
       {result ? (
         <div className={community ? "note ok verified" : "note warn"} role="status">
           <strong>{s.verified} · {s.someone} {shortId(result.id)}</strong>
@@ -568,8 +640,10 @@ export default function App() {
   if (page === "confirm" && arg) body = <Confirm {...ctx} raw={arg} />;
   else if (page === "checkin" && arg) body = <CheckIn {...ctx} challenge={arg as Hex} />;
   else if (page === "door") body = <DoorCheck {...ctx} />;
+  else if (page === "demo" && arg) body = <DemoScene {...ctx} which={arg} />;
   else if (!me) body = <Welcome {...ctx} />;
   else if (page === "code") body = <MyCode {...ctx} me={me} />;
+  else if (page === "scan") body = <ScanHelp {...ctx} />;
   else if (page === "u" && arg) body = <Person {...ctx} id={arg as Hex} />;
   else if (page === "thank" && arg) body = <Thank {...ctx} me={me} helper={arg as Hex} />;
   else if (page === "gift" && arg) body = <Gift {...ctx} me={me} to={arg as Hex} />;
@@ -606,7 +680,19 @@ export default function App() {
           </button>
         </div>
       </header>
-      {body}
+      <MotionConfig reducedMotion="user">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={route.join("/") || "home"}
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+          >
+            {body}
+          </motion.div>
+        </AnimatePresence>
+      </MotionConfig>
       <div id="live-region" className="sr-only" aria-live="polite" />
     </>
   );

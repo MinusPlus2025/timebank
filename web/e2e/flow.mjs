@@ -128,14 +128,14 @@ await wang.page.reload();
 await wang.page.waitForSelector(".facade-grid .tile-button");
 await wang.page.waitForTimeout(1500);
 await shot(wang, "02-home");
-await wang.page.click(".facade-grid .tile-button:nth-child(2)");
+await wang.page.click(".facade-grid > div:nth-child(2) .tile-button");
 await wang.page.waitForSelector(".window-detail");
 await wang.page.waitForTimeout(700);
 await shot(wang, "02b-window-open");
 await wang.page.click(".window-detail .secondary");
 
 // 4. Door check: the steward certifies 小赵, then 妈妈 checks him at the door.
-execSync(`npx hardhat run scripts/certify.js --network localhost`, {
+execSync(`npx hardhat run scripts/certify.js --network ${process.env.CERTIFY_NETWORK || "localhost"}`, {
   cwd: new URL("../../contracts", import.meta.url).pathname,
   env: { ...process.env, MEMBER_ID: zhaoId, COMMUNITY: "阳光社区" },
   stdio: "inherit",

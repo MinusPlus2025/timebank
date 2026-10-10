@@ -12,6 +12,7 @@
     "@fontsource/noto-sans-sc": "^5.1.0",
     "@fontsource/nunito": "^5.1.0",
     "@noble/curves": "^1.6.0",
+    "framer-motion": "^11.11.17",
     "jsqr": "^1.4.0",
     "qrcode": "^1.5.4",
     "react": "^18.3.1",

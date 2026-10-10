@@ -19,7 +19,7 @@
 |---|---|
 | 官网 / 报名 | https://www.monad.xyz/metropolis |
 | GitHub | https://github.com/MinusPlus2025/monad-metropolis-2026 |
-| 在线 Demo | （待定） |
+| 在线 Demo | https://monad-metropolis-2026.vercel.app/ |
 | 演示视频 | （待定） |
 | 合约地址 | Monad testnet `0x5CffF39486db8bD4FAd3826A7B19E92312A2949e` |
 | 提交页面 / 参赛后台 | https://hackathon.monad.xyz/dashboard （需要登录） |
@@ -59,7 +59,8 @@
 - [x] 合约已部署到 Monad testnet：`0x5CffF39486db8bD4FAd3826A7B19E92312A2949e`
 - [x] **实链验证**（scripts/smoke.js）：真人签名通过、冒充者被拒；双方盖印交易 619 ms 确认，gas 305,604（tx `0x354409724604ed053e27b9136e0b3366dc782ff890dfaba9e75416ae6c4d2277`）
 - [ ] 在区块浏览器上 verify 合约源码
-- [ ] Vercel 部署网页（用户注册 Vercel 并导入仓库；Claude 提供环境变量）
+- [x] Vercel 部署网页：https://monad-metropolis-2026.vercel.app/ （main 分支自动部署）
+- [x] 线上端到端测试（虚拟 Passkey，Monad testnet）：注册、盖印、转赠、兑换、开门验真全部通过
 - [ ] 用真实 iPhone / Android 测试刷脸流程（Safari、Chrome）
 - [ ] 录 Demo 视频（≤3 分钟）和 Pitch 视频（≤2 分钟，待确认）
 - [ ] 在 Portal 提交；仓库公开或给评审账号读权限

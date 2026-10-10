@@ -1211,3 +1211,182 @@ h2 {
     font-size: 4rem;
   }
 }
+
+/* ---------- motion v2 helpers ---------- */
+.tile-wrap {
+  position: relative;
+  overflow: hidden;
+}
+.tile-wrap > .tile,
+.tile-layer {
+  position: absolute;
+  inset: 0;
+}
+.tile-layer > .tile {
+  width: 100%;
+  height: 100%;
+}
+.embers {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+.ember {
+  position: absolute;
+  bottom: 18%;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #f2b84b;
+  box-shadow: 0 0 10px 3px rgba(242, 184, 75, 0.6);
+}
+.garland-scene,
+.plane-scene {
+  overflow: visible;
+}
+.plane {
+  position: absolute;
+  offset-path: none;
+  animation: none;
+  transform-origin: center;
+  margin: -15px 0 0 -15px;
+  z-index: 2;
+}
+.onb-art {
+  height: auto;
+  min-height: 40vh;
+  display: grid;
+  place-items: center;
+  background: var(--wall);
+  border: 1px solid var(--line);
+  padding: 16px;
+  overflow: hidden;
+}
+.onb-scene {
+  width: 100%;
+}
+.onb-street {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px 10px;
+}
+.onb-scene .garland-scene,
+.onb-scene .plane-scene {
+  border: 0;
+  background: transparent;
+}
+.dots span {
+  display: block;
+  height: 8px;
+  border-radius: 99px;
+  background: var(--ink);
+}
+.door-scene {
+  perspective: 900px;
+}
+.door-panel {
+  transform: none;
+}
+.door-qr {
+  margin: 8px auto 16px;
+  max-width: 360px;
+}
+.dock-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  line-height: 1.2;
+  padding: 8px 10px;
+  border-radius: 20px;
+  min-height: 60px;
+}
+.dock-btn small {
+  font-weight: 400;
+  font-size: 0.75rem;
+  opacity: 0.75;
+}
+.sky-links {
+  display: flex;
+  gap: 16px;
+}
+.how {
+  margin: 18px 16px 0;
+  padding: 18px 20px;
+  border: 1px dashed var(--line);
+  border-radius: 20px;
+  background: var(--paper);
+}
+.how h2 {
+  margin: 0 0 10px;
+}
+.how ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+.how li {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  line-height: 1.5;
+}
+.step-num {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: var(--ink);
+  color: var(--paper);
+}
+
+/* ---------- large text mode ---------- */
+:root[data-big="1"] .topbar {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+:root[data-big="1"] .prefs {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+:root[data-big="1"] .chip {
+  font-size: 0.7rem;
+  padding: 6px 10px;
+}
+:root[data-big="1"] .headline {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+:root[data-big="1"] .sky-meta {
+  flex-direction: column;
+  align-items: flex-start;
+}
+:root[data-big="1"] .categories {
+  grid-template-columns: repeat(2, 1fr);
+}
+:root[data-big="1"] .choices {
+  grid-template-columns: repeat(2, 1fr);
+}
+:root[data-big="1"] .dock {
+  grid-template-columns: 1fr;
+}
+:root[data-big="1"] .home {
+  padding-bottom: 200px;
+}
+:root[data-big="1"] .facade-grid {
+  grid-template-columns: 1fr 1fr;
+}
+
+.demo-scene {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 40px 16px;
+}
