@@ -1,7 +1,11 @@
 // The "thump" of a seal landing: synthesized, so there is no audio file to load.
 export function stampFeedback() {
+  // A screen-edge glow accompanies the sound, so the moment is never audio-only.
+  document.body.classList.remove("flash");
+  void document.body.offsetWidth;
+  document.body.classList.add("flash");
   try {
-    navigator.vibrate?.(40);
+    navigator.vibrate?.([60, 40, 60]);
     const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     const ctx = new Ctx();
     const now = ctx.currentTime;

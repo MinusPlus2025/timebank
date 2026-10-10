@@ -10,6 +10,7 @@ import { usePhase, type Phase } from "./theme";
 import { Wordmark } from "./Brand";
 import { Door, Facade, Garland, PaperPlane, TILE, WindowTile } from "./Windows";
 import { Onboarding } from "./Onboarding";
+import { configureVoice, speak, useSpeakOnShow, voiceSupported } from "./voice";
 
 // ---------- routing & app state ----------
 
@@ -159,6 +160,7 @@ function Home({ s, lang, phase, me }: Ctx & { me: Me }) {
   }, [me.id]);
 
   const given = seals.filter((x) => x.helper === me.id).reduce((sum, x) => sum + x.minutes, 0);
+  useSpeakOnShow(member && s.homeSpoken(formatHours(given), formatMinutes(member.balance, s)));
   // A multiple of 4 fills both the 2-column phone layout and the 4-column desktop layout.
   const total = Math.max(8, Math.ceil((seals.length + 1) / 4) * 4);
   const unlit = total - seals.length - 1;
@@ -229,6 +231,7 @@ function Home({ s, lang, phase, me }: Ctx & { me: Me }) {
 
 function MyCode({ s, phase, me }: Ctx & { me: Me }) {
   const url = appUrl(`/u/${me.id}`);
+  useSpeakOnShow(`${s.myCode}。${s.myCodeHint}`);
   return (
     <Screen s={s} title={s.myCode} onBack={() => go("/")}>
       <div className="sheet center">
@@ -287,6 +290,7 @@ function Thank({ s, lang, phase, me, helper }: Ctx & { me: Me; helper: Hex }) {
       setPayload(encodeSealPayload(p));
     });
 
+  useSpeakOnShow(payload ? s.showToHelper : `${s.thankTitle}。${s.whatHelp}`);
   if (payload) {
     const url = appUrl(`/confirm/${payload}`);
     return (
@@ -336,6 +340,7 @@ function Confirm({ s, lang, phase, me, setMe, raw }: Ctx & { raw: string }) {
   }, [raw]);
   const [done, setDone] = useState<Hex | null>(null);
   const { busy, error, run } = useAsync();
+  useSpeakOnShow(p && (done ? `${s.sealed}。${s.sealedBody}` : `${s.confirmTitle}。${s.confirmBody(formatMinutes(p.m, s), (CATEGORIES.find((c) => c.id === p.c) ?? CATEGORIES[0])[lang])}`));
   if (!p) return <Screen s={s}><ErrorNote error="bad link" s={s} /></Screen>;
   const cat = CATEGORIES.find((c) => c.id === p.c) ?? CATEGORIES[0];
 
@@ -385,6 +390,7 @@ function Gift({ s, phase, me, to }: Ctx & { me: Me; to: Hex }) {
     chain.getMember(me.id).then((m) => setBalance(m.balance)).catch(() => undefined);
   }, [me.id]);
 
+  useSpeakOnShow(done ? `${s.gifted}。${s.giftedBody}` : `${s.giftTitle}。${s.giftHint}`);
   const send = () =>
     run(async () => {
       const digest = await chain.giftDigest(me.id, to, minutes);
@@ -485,6 +491,7 @@ function DoorCheck({ s, phase }: Ctx) {
   }, [challenge]);
 
   const community = result && BigInt(result.community) !== 0n ? hexToString(result.community, { size: 32 }).replace(/\0/g, "") : "";
+  useSpeakOnShow(result ? `${s.verified}。${community ? s.verifiedCommunity(community) : s.notCertified}` : `${s.doorTitle}。${s.doorHint}`);
   return (
     <Screen s={s} title={s.doorTitle} onBack={() => go("/")}>
       <Door open={!!result}>
@@ -508,6 +515,7 @@ function DoorCheck({ s, phase }: Ctx) {
 function CheckIn({ s, me, setMe, challenge }: Ctx & { challenge: Hex }) {
   const [done, setDone] = useState(false);
   const { busy, error, run } = useAsync();
+  useSpeakOnShow(done ? s.checkedIn : `${s.checkInTitle}。${s.checkInBody}`);
   const prove = () =>
     run(async () => {
       const r = await signAs(challenge, me?.id);
@@ -532,6 +540,7 @@ export default function App() {
   const route = useHashRoute();
   const [lang, setLang] = useState<Lang>(() => (readPref("timebank.lang", detectLang()) as Lang));
   const [big, setBig] = useState(() => readPref("timebank.big", "0") === "1");
+  const [voice, setVoice] = useState(() => readPref("timebank.voice", "0") === "1");
   const params = new URLSearchParams(window.location.search);
   const phase = usePhase((params.get("phase") as Phase | null) ?? null);
   const [me, setMeState] = useState<Me | null>(loadMe);
@@ -541,6 +550,7 @@ export default function App() {
     document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
     document.title = lang === "zh" ? "时间银行 · timebank" : "timebank";
   }, [lang]);
+  useEffect(() => configureVoice(voice, lang), [voice, lang]);
   useEffect(() => {
     document.documentElement.dataset.big = big ? "1" : "0";
     document.documentElement.dataset.phase = phase;
@@ -573,6 +583,21 @@ export default function App() {
           <Wordmark size={22} />
         </button>
         <div className="prefs">
+          {voiceSupported() && (
+            <button
+              className="chip"
+              aria-pressed={voice}
+              onClick={() => {
+                const next = !voice;
+                setVoice(next);
+                writePref("timebank.voice", next ? "1" : "0");
+                configureVoice(next, lang);
+                if (next) speak(s.voiceOn);
+              }}
+            >
+              <span aria-hidden>{voice ? "🔊" : "🔈"}</span> {s.voice}
+            </button>
+          )}
           <button className="chip" aria-pressed={big} onClick={() => { setBig(!big); writePref("timebank.big", big ? "0" : "1"); }}>
             {s.bigText}
           </button>
@@ -582,6 +607,7 @@ export default function App() {
         </div>
       </header>
       {body}
+      <div id="live-region" className="sr-only" aria-live="polite" />
     </>
   );
 }
