@@ -1,0 +1,613 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { hexToString, toHex, type Hex } from "viem";
+import { CATEGORIES, detectLang, formatHours, formatMinutes, strings, type Lang, type Strings } from "./i18n";
+import { idOf, loadMe, saveMe, shortId, encodeSealPayload, decodeSealPayload, type Me, type SealPayload } from "./identity";
+import { createPasskey, passkeysSupported, signWithPasskey } from "./passkey";
+import * as chain from "./chain";
+import { stampFeedback } from "./feedback";
+import { CopyLink, ErrorNote, QR, Screen, errorMessage } from "./ui";
+import { usePhase, type Phase } from "./theme";
+import { Wordmark } from "./Brand";
+import { Door, Facade, Garland, PaperPlane, TILE, WindowTile } from "./Windows";
+import { Onboarding } from "./Onboarding";
+import { configureVoice, speak, useSpeakOnShow, voiceSupported } from "./voice";
+
+// ---------- routing & app state ----------
+
+function useHashRoute() {
+  const [hash, setHash] = useState(() => window.location.hash.slice(1) || "/");
+  useEffect(() => {
+    const on = () => {
+      setHash(window.location.hash.slice(1) || "/");
+      window.scrollTo(0, 0);
+    };
+    window.addEventListener("hashchange", on);
+    return () => window.removeEventListener("hashchange", on);
+  }, []);
+  return hash.split("/").filter(Boolean);
+}
+
+const go = (path: string) => (window.location.hash = path);
+const appUrl = (path: string) => `${window.location.origin}${window.location.pathname}#${path}`;
+
+function readPref(key: string, fallback: string): string {
+  try {
+    return localStorage.getItem(key) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+function writePref(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* preferences are optional */
+  }
+}
+
+type Ctx = { s: Strings; lang: Lang; phase: Phase; me: Me | null; setMe: (m: Me) => void };
+
+const tileFor = (category: number) => CATEGORIES.find((c) => c.id === category)?.tile ?? 4;
+
+/** Sign with a passkey and work out which member signed. */
+async function signAs(challenge: Hex, expected?: Hex) {
+  const { assertion, publicKeys } = await signWithPasskey(challenge);
+  for (const pk of publicKeys) {
+    const id = idOf(pk.x, pk.y);
+    if (expected ? id === expected : (await chain.getMember(id)).exists) return { assertion, id, ...pk };
+  }
+  throw new Error("wrong-person");
+}
+
+function useAsync() {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const run = useCallback(async (fn: () => Promise<void>) => {
+    setBusy(true);
+    setError("");
+    try {
+      await fn();
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+  return { busy, error, run };
+}
+
+// ---------- screens ----------
+
+function Welcome({ s, phase, setMe }: Ctx) {
+  const [seen, setSeen] = useState(() => readPref("timebank.onboarded", "0") === "1");
+  const [splash, setSplash] = useState(true);
+  const [name, setName] = useState("");
+  const { busy, error, run } = useAsync();
+  useEffect(() => {
+    const t = setTimeout(() => setSplash(false), 3200);
+    return () => clearTimeout(t);
+  }, []);
+
+  if (splash)
+    return (
+      <main className="splash" onClick={() => setSplash(false)}>
+        <Wordmark size={64} animated />
+        <p>{s.tagline}</p>
+      </main>
+    );
+
+  if (!seen)
+    return (
+      <Onboarding
+        s={s}
+        phase={phase}
+        onDone={() => {
+          writePref("timebank.onboarded", "1");
+          setSeen(true);
+        }}
+      />
+    );
+
+  const create = () =>
+    run(async () => {
+      const { x, y } = await createPasskey(name.trim() || "timebank");
+      await chain.relay("register", [x, y]);
+      setMe({ id: idOf(x, y), x, y, name: name.trim() });
+    });
+  const signIn = () =>
+    run(async () => {
+      const r = await signAs(toHex(crypto.getRandomValues(new Uint8Array(32))));
+      setMe({ id: r.id, x: r.x, y: r.y, name: "" });
+    });
+
+  return (
+    <main className="welcome">
+      <div className="welcome-window">
+        <WindowTile phase={phase} tile={TILE.you} lit={false} />
+      </div>
+      <Wordmark size={44} animated />
+      <p className="tagline">{s.tagline}</p>
+      {!passkeysSupported() ? (
+        <p className="note error">{s.noPasskey}</p>
+      ) : (
+        <div className="sheet">
+          <label className="field">
+            <span>{s.namePrompt}</span>
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder={s.namePlaceholder} maxLength={20} />
+            <small>{s.nameHint}</small>
+          </label>
+          <button className="primary" disabled={busy} onClick={create}>
+            {busy ? s.creating : s.createPasskey}
+          </button>
+          <button className="link" disabled={busy} onClick={signIn}>
+            {s.signInExisting}
+          </button>
+          {error && <ErrorNote error={error} s={s} />}
+        </div>
+      )}
+      <p className="ethics">{s.ethics}</p>
+    </main>
+  );
+}
+
+function Home({ s, lang, phase, me }: Ctx & { me: Me }) {
+  const [member, setMember] = useState<chain.Member | null>(null);
+  const [seals, setSeals] = useState<chain.SealRecord[]>([]);
+  const [open, setOpen] = useState<chain.SealRecord | null>(null);
+  useEffect(() => {
+    chain.getMember(me.id).then(setMember).catch(() => undefined);
+    chain.getSealsOf(me.id).then((list) => setSeals(list.reverse())).catch(() => undefined);
+  }, [me.id]);
+
+  const given = seals.filter((x) => x.helper === me.id).reduce((sum, x) => sum + x.minutes, 0);
+  useSpeakOnShow(member && s.homeSpoken(formatHours(given), formatMinutes(member.balance, s)));
+  // A multiple of 4 fills both the 2-column phone layout and the 4-column desktop layout.
+  const total = Math.max(8, Math.ceil((seals.length + 1) / 4) * 4);
+  const unlit = total - seals.length - 1;
+
+  return (
+    <main className="home">
+      <header className="sky">
+        <p className="greeting">
+          {phase === "day" ? s.greetingDay : s.greetingNight}
+          {me.name ? `${lang === "zh" ? "，" : ", "}${me.name}` : ""}
+        </p>
+        <div className="headline">
+          <b>{formatHours(given)}</b>
+          <span>
+            {s.litHeadline}
+            <small>{s.litSub}</small>
+          </span>
+        </div>
+        <div className="sky-meta">
+          <span>
+            {s.available} <strong>{member ? formatMinutes(member.balance, s) : "…"}</strong>
+          </span>
+          {!!member?.balance && (
+            <button className="link" onClick={() => go("/donate")}>{s.donate}</button>
+          )}
+        </div>
+        <nav className="dock">
+          <button className="dock-btn main" onClick={() => go("/code")}>{s.myCode}</button>
+          <button className="dock-btn" onClick={() => go("/door")}>{s.door}</button>
+        </nav>
+      </header>
+      <Facade>
+        <WindowTile phase={phase} tile={TILE.you} label={s.yourWindow} onClick={() => go("/code")} />
+        {seals.map((seal) => (
+          <WindowTile
+            key={seal.id}
+            phase={phase}
+            tile={tileFor(seal.category)}
+            label={CATEGORIES.find((c) => c.id === seal.category)?.[lang]}
+            onClick={() => setOpen(seal)}
+          />
+        ))}
+        {Array.from({ length: unlit }, (_, i) => (
+          <WindowTile key={`u${i}`} phase={phase} tile={TILE.unlit[i % 2]} lit={false} />
+        ))}
+      </Facade>
+      {open && (
+        <div className="overlay" onClick={() => setOpen(null)}>
+          <div className="sheet window-detail" onClick={(e) => e.stopPropagation()}>
+            <WindowTile phase={phase} tile={tileFor(open.category)} fresh />
+            <h2>
+              {CATEGORIES.find((c) => c.id === open.category)?.[lang]} · {formatMinutes(open.minutes, s)}
+            </h2>
+            <p className="muted">
+              {open.helper === me.id ? s.iHelped : s.helpedMe} {shortId(open.helper === me.id ? open.receiver : open.helper)} ·{" "}
+              {new Date(open.timestamp * 1000).toLocaleDateString(lang === "zh" ? "zh-CN" : "en-GB")}
+            </p>
+            <a className="link" href={`${chain.EXPLORER}/address/${chain.TIMEBANK}`} target="_blank" rel="noreferrer">
+              {s.onChain} ↗
+            </a>
+            <button className="secondary" onClick={() => setOpen(null)}>{s.close}</button>
+          </div>
+        </div>
+      )}
+    </main>
+  );
+}
+
+function MyCode({ s, phase, me }: Ctx & { me: Me }) {
+  const url = appUrl(`/u/${me.id}`);
+  useSpeakOnShow(`${s.myCode}。${s.myCodeHint}`);
+  return (
+    <Screen s={s} title={s.myCode} onBack={() => go("/")}>
+      <div className="sheet center">
+        <div className="qr-frame">
+          <QR value={url} label={s.myCode} />
+          <span className="qr-badge"><WindowTile phase={phase} tile={TILE.you} /></span>
+        </div>
+        <p className="muted">{s.myCodeHint}</p>
+        <CopyLink url={url} s={s} />
+      </div>
+    </Screen>
+  );
+}
+
+function Person({ s, phase, id }: Ctx & { id: Hex }) {
+  return (
+    <Screen s={s} title={`${s.someone} ${shortId(id)}`} onBack={() => go("/")}>
+      <div className="person-window"><WindowTile phase={phase} tile={TILE.unlit[0]} lit={false} /></div>
+      <div className="stack">
+        <button className="primary" onClick={() => go(`/thank/${id}`)}>{s.thank}</button>
+        <button className="secondary" onClick={() => go(`/gift/${id}`)}>{s.giftTo}</button>
+      </div>
+    </Screen>
+  );
+}
+
+function Choice({ options, value, onChange, render }: { options: readonly number[]; value: number; onChange: (v: number) => void; render: (v: number) => string }) {
+  return (
+    <div className="choices" role="radiogroup">
+      {options.map((o) => (
+        <button key={o} role="radio" aria-checked={o === value} className={o === value ? "choice on" : "choice"} onClick={() => onChange(o)}>
+          {render(o)}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function Thank({ s, lang, phase, me, helper }: Ctx & { me: Me; helper: Hex }) {
+  const [category, setCategory] = useState(1);
+  const [minutes, setMinutes] = useState(60);
+  const [redeem, setRedeem] = useState(false);
+  const [balance, setBalance] = useState(0);
+  const [payload, setPayload] = useState("");
+  const { busy, error, run } = useAsync();
+  useEffect(() => {
+    chain.getMember(me.id).then((m) => setBalance(m.balance)).catch(() => undefined);
+  }, [me.id]);
+
+  const sign = () =>
+    run(async () => {
+      if (helper === me.id) throw new Error(lang === "zh" ? "不能感谢自己" : "You can't thank yourself");
+      const digest = await chain.sealDigest(helper, me.id, minutes, category, redeem);
+      const { assertion } = await signAs(digest, me.id);
+      const p: SealPayload = { h: helper, r: me.id, m: minutes, c: category, d: redeem, a: assertion };
+      setPayload(encodeSealPayload(p));
+    });
+
+  useSpeakOnShow(payload ? s.showToHelper : `${s.thankTitle}。${s.whatHelp}`);
+  if (payload) {
+    const url = appUrl(`/confirm/${payload}`);
+    return (
+      <Screen s={s} title={s.thankTitle} onBack={() => setPayload("")}>
+        <div className="sheet center">
+          <QR value={url} label={s.showToHelper} />
+          <p className="instruction">{s.showToHelper}</p>
+          <CopyLink url={url} s={s} />
+        </div>
+      </Screen>
+    );
+  }
+
+  return (
+    <Screen s={s} title={s.thankTitle} onBack={() => go("/")}>
+      <h2>{s.whatHelp}</h2>
+      <div className="categories">
+        {CATEGORIES.map((c) => (
+          <button key={c.id} className={c.id === category ? "category on" : "category"} aria-pressed={c.id === category} onClick={() => setCategory(c.id)}>
+            <WindowTile phase={phase} tile={c.tile} />
+            <span>{c[lang]}</span>
+          </button>
+        ))}
+      </div>
+      <h2>{s.howLong}</h2>
+      <Choice options={[30, 60, 90, 120]} value={minutes} onChange={setMinutes} render={(m) => formatMinutes(m, s)} />
+      <label className="toggle">
+        <input type="checkbox" checked={redeem} disabled={balance < minutes} onChange={(e) => setRedeem(e.target.checked)} />
+        <span>
+          {s.payWithMine} {balance < minutes && <em>({s.notEnough})</em>}
+          <small>{s.payWithMineHint}</small>
+        </span>
+      </label>
+      <button className="primary" disabled={busy} onClick={sign}>{s.signThanks}</button>
+      {error && <ErrorNote error={error === "wrong-person" ? s.wrongPerson : error} s={s} />}
+    </Screen>
+  );
+}
+
+function Confirm({ s, lang, phase, me, setMe, raw }: Ctx & { raw: string }) {
+  const p = useMemo(() => {
+    try {
+      return decodeSealPayload(raw);
+    } catch {
+      return null;
+    }
+  }, [raw]);
+  const [done, setDone] = useState<Hex | null>(null);
+  const { busy, error, run } = useAsync();
+  useSpeakOnShow(p && (done ? `${s.sealed}。${s.sealedBody}` : `${s.confirmTitle}。${s.confirmBody(formatMinutes(p.m, s), (CATEGORIES.find((c) => c.id === p.c) ?? CATEGORIES[0])[lang])}`));
+  if (!p) return <Screen s={s}><ErrorNote error="bad link" s={s} /></Screen>;
+  const cat = CATEGORIES.find((c) => c.id === p.c) ?? CATEGORIES[0];
+
+  const seal = () =>
+    run(async () => {
+      const digest = await chain.sealDigest(p.h, p.r, p.m, p.c, p.d);
+      const helper = await signAs(digest, p.h);
+      if (!me) setMe({ id: helper.id, x: helper.x, y: helper.y, name: "" });
+      const { hash } = await chain.relay("seal", [p.h, p.r, p.m, p.c, p.d, chain.toArgs(helper.assertion), chain.toArgs(p.a)]);
+      setDone(hash);
+      setTimeout(stampFeedback, 900);
+    });
+
+  if (done) {
+    return (
+      <Screen s={s}>
+        <div className="center celebrate">
+          <Garland phase={phase} left={TILE.you} right={cat.tile} />
+          <h1>{s.sealed}</h1>
+          <p>{s.sealedBody}</p>
+          <a className="link" href={`${chain.EXPLORER}/tx/${done}`} target="_blank" rel="noreferrer">{s.onChain} ↗</a>
+          <button className="secondary" onClick={() => go("/")}>{s.home}</button>
+        </div>
+      </Screen>
+    );
+  }
+
+  return (
+    <Screen s={s} title={s.confirmTitle}>
+      <div className="sheet center">
+        <WindowTile phase={phase} tile={cat.tile} />
+        <p className="instruction">{s.confirmBody(formatMinutes(p.m, s), cat[lang])}</p>
+        <p className="muted small">{s.someone} {shortId(p.r)}</p>
+        <button className="primary" disabled={busy} onClick={seal}>{busy ? s.sealing : s.signSeal}</button>
+        {error && <ErrorNote error={error === "wrong-person" ? s.wrongPerson : error} s={s} />}
+      </div>
+    </Screen>
+  );
+}
+
+function Gift({ s, phase, me, to }: Ctx & { me: Me; to: Hex }) {
+  const [balance, setBalance] = useState(0);
+  const [minutes, setMinutes] = useState(60);
+  const [done, setDone] = useState("");
+  const { busy, error, run } = useAsync();
+  useEffect(() => {
+    chain.getMember(me.id).then((m) => setBalance(m.balance)).catch(() => undefined);
+  }, [me.id]);
+
+  useSpeakOnShow(done ? `${s.gifted}。${s.giftedBody}` : `${s.giftTitle}。${s.giftHint}`);
+  const send = () =>
+    run(async () => {
+      const digest = await chain.giftDigest(me.id, to, minutes);
+      const { assertion } = await signAs(digest, me.id);
+      const { hash } = await chain.relay("gift", [me.id, to, minutes, chain.toArgs(assertion)]);
+      setDone(hash);
+      setTimeout(stampFeedback, 1600);
+    });
+
+  if (done) {
+    return (
+      <Screen s={s}>
+        <div className="center celebrate">
+          <PaperPlane phase={phase} />
+          <h1>{s.gifted} · {formatMinutes(minutes, s)}</h1>
+          <p className="quote">{s.giftedBody}</p>
+          <a className="link" href={`${chain.EXPLORER}/tx/${done}`} target="_blank" rel="noreferrer">{s.onChain} ↗</a>
+          <button className="secondary" onClick={() => go("/")}>{s.home}</button>
+        </div>
+      </Screen>
+    );
+  }
+
+  return (
+    <Screen s={s} title={s.giftTitle} onBack={() => go("/")}>
+      <div className="gift-head"><WindowTile phase={phase} tile={TILE.family} /></div>
+      <p className="muted">{s.giftHint}</p>
+      <p>{s.available}: <strong>{formatMinutes(balance, s)}</strong></p>
+      <h2>{s.giftAmount}</h2>
+      <Choice options={[30, 60, 120, 300]} value={minutes} onChange={setMinutes} render={(m) => formatMinutes(m, s)} />
+      <button className="primary" disabled={busy || balance < minutes} onClick={send}>{balance < minutes ? s.notEnough : s.signGift}</button>
+      {error && <ErrorNote error={error} s={s} />}
+    </Screen>
+  );
+}
+
+function Donate({ s, me }: Ctx & { me: Me }) {
+  const [balance, setBalance] = useState(0);
+  const [pool, setPool] = useState(0);
+  const [minutes, setMinutes] = useState(30);
+  const [done, setDone] = useState(false);
+  const { busy, error, run } = useAsync();
+  useEffect(() => {
+    chain.getMember(me.id).then((m) => setBalance(m.balance)).catch(() => undefined);
+    chain.getPoolBalance().then(setPool).catch(() => undefined);
+  }, [me.id, done]);
+
+  const give = () =>
+    run(async () => {
+      const digest = await chain.donateDigest(me.id, minutes);
+      const { assertion } = await signAs(digest, me.id);
+      await chain.relay("donate", [me.id, minutes, chain.toArgs(assertion)]);
+      setDone(true);
+      stampFeedback();
+    });
+
+  return (
+    <Screen s={s} title={s.donate} onBack={() => go("/")}>
+      <p className="muted">{s.donateHint}</p>
+      <p>{s.pool}: <strong>{formatMinutes(pool, s)}</strong></p>
+      {done ? (
+        <p className="note ok">{s.donated}</p>
+      ) : (
+        <>
+          <Choice options={[30, 60, 120]} value={minutes} onChange={setMinutes} render={(m) => formatMinutes(m, s)} />
+          <button className="primary" disabled={busy || balance < minutes} onClick={give}>{balance < minutes ? s.notEnough : s.donate}</button>
+        </>
+      )}
+      {error && <ErrorNote error={error} s={s} />}
+    </Screen>
+  );
+}
+
+function DoorCheck({ s, phase }: Ctx) {
+  const [challenge] = useState(() => toHex(crypto.getRandomValues(new Uint8Array(32))));
+  const [result, setResult] = useState<{ id: Hex; community: Hex } | null>(null);
+  useEffect(() => {
+    let stop = false;
+    let from: bigint | null = null;
+    const tick = async () => {
+      try {
+        from ??= (await chain.client.getBlockNumber()) - 5n;
+        const found = await chain.findCheckIn(challenge, from);
+        if (found?.id && !stop) {
+          setResult({ id: found.id, community: found.community! });
+          stampFeedback();
+          return;
+        }
+      } catch {
+        /* keep polling */
+      }
+      if (!stop) setTimeout(tick, 1000);
+    };
+    tick();
+    return () => {
+      stop = true;
+    };
+  }, [challenge]);
+
+  const community = result && BigInt(result.community) !== 0n ? hexToString(result.community, { size: 32 }).replace(/\0/g, "") : "";
+  useSpeakOnShow(result ? `${s.verified}。${community ? s.verifiedCommunity(community) : s.notCertified}` : `${s.doorTitle}。${s.doorHint}`);
+  return (
+    <Screen s={s} title={s.doorTitle} onBack={() => go("/")}>
+      <Door open={!!result}>
+        {result ? <WindowTile phase={phase} tile={0} /> : <QR value={appUrl(`/checkin/${challenge}`)} label={s.doorTitle} />}
+      </Door>
+      {result ? (
+        <div className={community ? "note ok verified" : "note warn"} role="status">
+          <strong>{s.verified} · {s.someone} {shortId(result.id)}</strong>
+          <p>{community ? s.verifiedCommunity(community) : s.notCertified}</p>
+        </div>
+      ) : (
+        <>
+          <p className="instruction center-text">{s.doorHint}</p>
+          <p className="muted pulse center-text">{s.waiting}</p>
+        </>
+      )}
+    </Screen>
+  );
+}
+
+function CheckIn({ s, me, setMe, challenge }: Ctx & { challenge: Hex }) {
+  const [done, setDone] = useState(false);
+  const { busy, error, run } = useAsync();
+  useSpeakOnShow(done ? s.checkedIn : `${s.checkInTitle}。${s.checkInBody}`);
+  const prove = () =>
+    run(async () => {
+      const r = await signAs(challenge, me?.id);
+      if (!me) setMe({ id: r.id, x: r.x, y: r.y, name: "" });
+      await chain.relay("checkIn", [r.id, challenge, chain.toArgs(r.assertion)]);
+      setDone(true);
+    });
+  return (
+    <Screen s={s} title={s.checkInTitle}>
+      <div className="sheet center">
+        <p>{s.checkInBody}</p>
+        {done ? <p className="note ok">{s.checkedIn}</p> : <button className="primary" disabled={busy} onClick={prove}>{s.signCheckIn}</button>}
+        {error && <ErrorNote error={error === "wrong-person" ? s.needRegister : error} s={s} />}
+      </div>
+    </Screen>
+  );
+}
+
+// ---------- shell ----------
+
+export default function App() {
+  const route = useHashRoute();
+  const [lang, setLang] = useState<Lang>(() => (readPref("timebank.lang", detectLang()) as Lang));
+  const [big, setBig] = useState(() => readPref("timebank.big", "0") === "1");
+  const [voice, setVoice] = useState(() => readPref("timebank.voice", "0") === "1");
+  const params = new URLSearchParams(window.location.search);
+  const phase = usePhase((params.get("phase") as Phase | null) ?? null);
+  const [me, setMeState] = useState<Me | null>(loadMe);
+  const s = strings[lang];
+
+  useEffect(() => {
+    document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
+    document.title = lang === "zh" ? "时间银行 · timebank" : "timebank";
+  }, [lang]);
+  useEffect(() => configureVoice(voice, lang), [voice, lang]);
+  useEffect(() => {
+    document.documentElement.dataset.big = big ? "1" : "0";
+    document.documentElement.dataset.phase = phase;
+  }, [big, phase]);
+
+  const setMe = (m: Me) => {
+    saveMe(m);
+    setMeState(m);
+  };
+  const ctx: Ctx = { s, lang, phase, me, setMe };
+
+  const [page, arg] = route;
+  let body;
+  // Links that work without a local identity: the helper may be on a new phone.
+  if (page === "confirm" && arg) body = <Confirm {...ctx} raw={arg} />;
+  else if (page === "checkin" && arg) body = <CheckIn {...ctx} challenge={arg as Hex} />;
+  else if (page === "door") body = <DoorCheck {...ctx} />;
+  else if (!me) body = <Welcome {...ctx} />;
+  else if (page === "code") body = <MyCode {...ctx} me={me} />;
+  else if (page === "u" && arg) body = <Person {...ctx} id={arg as Hex} />;
+  else if (page === "thank" && arg) body = <Thank {...ctx} me={me} helper={arg as Hex} />;
+  else if (page === "gift" && arg) body = <Gift {...ctx} me={me} to={arg as Hex} />;
+  else if (page === "donate") body = <Donate {...ctx} me={me} />;
+  else body = <Home {...ctx} me={me} />;
+
+  return (
+    <>
+      <header className="topbar">
+        <button className="brand-mini" onClick={() => go("/")} aria-label={s.home}>
+          <Wordmark size={22} />
+        </button>
+        <div className="prefs">
+          {voiceSupported() && (
+            <button
+              className="chip"
+              aria-pressed={voice}
+              onClick={() => {
+                const next = !voice;
+                setVoice(next);
+                writePref("timebank.voice", next ? "1" : "0");
+                configureVoice(next, lang);
+                if (next) speak(s.voiceOn);
+              }}
+            >
+              <span aria-hidden>{voice ? "🔊" : "🔈"}</span> {s.voice}
+            </button>
+          )}
+          <button className="chip" aria-pressed={big} onClick={() => { setBig(!big); writePref("timebank.big", big ? "0" : "1"); }}>
+            {s.bigText}
+          </button>
+          <button className="chip" onClick={() => { const next = lang === "zh" ? "en" : "zh"; setLang(next); writePref("timebank.lang", next); }}>
+            {s.language}
+          </button>
+        </div>
+      </header>
+      {body}
+      <div id="live-region" className="sr-only" aria-live="polite" />
+    </>
+  );
+}

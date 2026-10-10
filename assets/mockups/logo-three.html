@@ -1,0 +1,59 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="fonts.css"><style>
+body{margin:0;width:1200px;background:#f4efe6;font-family:"LXGW WenKai",serif;color:#1f2a24;padding:36px 40px;box-sizing:border-box}
+h1{font-size:28px;margin:0 0 4px}.sub{color:#6b6358;margin:0 0 22px}
+.sec{font-size:20px;font-weight:700;margin:26px 0 12px;display:flex;gap:10px;align-items:center}.sec span{font-family:Plex;font-size:12px;color:#8a8070;font-weight:400}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.card{background:#fffdf8;border-radius:24px;padding:24px 26px;box-shadow:0 2px 0 #e6dccb}
+.card h3{margin:0 0 4px;font-size:20px}.card p{margin:0 0 14px;color:#4a443c;font-size:14px;line-height:1.6}
+.stage{display:flex;align-items:center;justify-content:center;gap:26px;height:190px;border-radius:16px;background:#f7f2e8}
+.stage.dark{background:#28326B}
+.minis{display:flex;gap:16px;align-items:center;margin-top:12px}
+.minis .app{width:56px;height:56px;border-radius:14px;background:#3E8A5E;display:grid;place-items:center}
+.minis .app.n{background:#28326B}
+.minis .s{font-family:Plex;font-size:11px;color:#8a8070}
+</style></head><body>
+<h1>时间银行 Logo · 三类方案</h1><p class="sub">① 图形标 &nbsp;② 文字标 &nbsp;③ 图形 + 文字组合。配色沿用 App 的白天绿、夜晚靛蓝和灯光琥珀。</p>
+<div class="sec">① 图形标 <span>SYMBOL ONLY</span></div>
+<div class="row" id="r1"></div>
+<div class="sec">② 文字标 <span>WORDMARK</span></div>
+<div class="row" id="r2"></div>
+<div class="sec">③ 图形 + 文字 <span>COMBINATION</span></div>
+<div class="row" id="r3"></div>
+<script>
+const G='#3E8A5E',GD='#1F4A33',A='#FFC870',I='#28326B',P='#F6D3DC',C='#fffdf8';
+// 1a linked windows: two rounded squares interlocked, weave
+const linked=(s,c1=G,c2=A)=>`<svg width="${s}" height="${s}" viewBox="0 0 100 100">
+<rect x="40" y="40" width="46" height="46" rx="12" fill="none" stroke="${c2}" stroke-width="11"/>
+<rect x="14" y="14" width="46" height="46" rx="12" fill="none" stroke="${c1}" stroke-width="11"/>
+<path d="M40 52 V63" stroke="${c2}" stroke-width="11"/>
+</svg>`;
+// 1b sunrise window: arch with lit lower half
+const sunrise=(s,frame=G,lit=A,sky=P)=>`<svg width="${s}" height="${s}" viewBox="0 0 100 100">
+<path d="M24 84 V48 A26 26 0 0 1 76 48 V84Z" fill="${sky}"/>
+<path d="M24 84 V62 H76 V84Z" fill="${lit}"/>
+<circle cx="50" cy="62" r="13" fill="${lit}"/>
+<path d="M24 84 V48 A26 26 0 0 1 76 48 V84Z" fill="none" stroke="${frame}" stroke-width="8" stroke-linejoin="round"/>
+<path d="M16 84 H84" stroke="${frame}" stroke-width="8" stroke-linecap="round"/></svg>`;
+const minis=(f)=>`<div class="minis"><div class="app">${f(40,C,A)}</div><div class="app n">${f(40,C,A)}</div>${f(32)}${f(20)}<span class="s">app · dark · 32 · 20</span></div>`;
+const minis2=(f)=>`<div class="minis"><div class="app">${f(40,C,A,G)}</div><div class="app n">${f(40,C,A,I)}</div>${f(32)}${f(20)}<span class="s">app · dark · 32 · 20</span></div>`;
+document.getElementById('r1').innerHTML=`
+<div class="card"><h3>1a · 相扣的窗 Linked Windows</h3><p>两扇窗像链环一样扣在一起：一扇是你，一扇是邻居。互相帮助，所以彼此相连。两笔就能画出来，好记、好传播。</p>
+<div class="stage">${linked(150)}</div>${minis(linked)}</div>
+<div class="card"><h3>1b · 窗里的日出 Window Sunrise</h3><p>一扇拱形窗，窗里升起一轮太阳。窗代表家和邻里，日出代表希望和新的一天。全世界都看得懂，也很温暖。</p>
+<div class="stage">${sunrise(150)}</div>${minis2(sunrise)}</div>`;
+// wordmarks
+const zhMark=(size,ink=GD,glow=A)=>`<div style="font-family:NotoSerif;font-weight:900;font-size:${size}px;color:${ink};letter-spacing:.06em;display:flex;align-items:center">时<span style="position:relative;display:inline-block">门<span style="position:absolute;left:50%;top:58%;transform:translate(-50%,-50%);font-size:.5em;font-weight:900;color:${glow};text-shadow:0 0 .3em ${glow}aa">日</span></span>银行</div>`;
+const enMark=(size,ink=GD,glow=A)=>`<div style="font-family:Nunito;font-weight:900;font-size:${size}px;color:${ink};letter-spacing:-.02em;position:relative;line-height:1">t<span style="display:inline-block;position:relative;width:.2em;height:.52em;margin:0 .05em 0 .04em;background:${ink};border-radius:.04em;vertical-align:baseline"><span style="position:absolute;left:50%;top:-.34em;transform:translateX(-50%);width:.22em;height:.22em;border-radius:.05em;background:${glow};box-shadow:0 0 .14em ${glow}"></span></span>mebank</div>`;
+document.getElementById('r2').innerHTML=`
+<div class="card"><h3>2a · 中文字标「间」里有光</h3><p>“间”字本来就是“门”里有“日”：门缝里透进来的光。我们把“日”点亮成暖黄色。汉字自带的故事，讲给海外评委听也很有记忆点。</p>
+<div class="stage">${zhMark(64)}</div><div class="stage dark" style="height:110px;margin-top:10px">${zhMark(44,'#F3EEDF')}</div></div>
+<div class="card"><h3>2b · 英文字标 timebank</h3><p>全小写的圆体字，亲切不严肃；“i”上的点换成一扇亮着的小窗。国际通用，一眼就能读出产品名。</p>
+<div class="stage">${enMark(72)}</div><div class="stage dark" style="height:110px;margin-top:10px">${enMark(50,'#F3EEDF')}</div></div>`;
+// combos
+document.getElementById('r3').innerHTML=`
+<div class="card"><h3>3a · 相扣的窗 + 中英文名</h3><p>横排的组合，适合网页顶栏、提交材料封面。图形和文字分开使用也都能成立。</p>
+<div class="stage" style="gap:18px">${linked(84)}<div><div style="font-family:NotoSerif;font-weight:900;font-size:38px;color:${GD};letter-spacing:.08em">时间银行</div><div style="font-family:Nunito;font-weight:900;font-size:24px;color:${G};letter-spacing:.02em">timebank</div></div></div>
+<div class="stage dark" style="height:110px;margin-top:10px;gap:14px">${linked(56,'#8FD3A8',A)}<div style="font-family:Nunito;font-weight:900;font-size:30px;color:#F3EEDF">timebank</div></div></div>
+<div class="card"><h3>3b · 日出之窗 + 「间」字标</h3><p>竖排组合，适合 App 启动页和海报：上面一扇日出之窗，下面是“间”里有光的中文名，再配一行英文。</p>
+<div class="stage" style="flex-direction:column;gap:6px;height:230px">${sunrise(80)}${zhMark(34)}<div style="font-family:Nunito;font-weight:900;font-size:16px;color:${G};letter-spacing:.3em">TIMEBANK</div></div></div>`;
+</script></body></html>

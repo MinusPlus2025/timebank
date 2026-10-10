@@ -1,0 +1,49 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="fonts.css"><style>
+body{margin:0;width:1200px;background:#f4efe6;font-family:"LXGW WenKai",serif;color:#1f2a24;padding:36px 40px;box-sizing:border-box}
+h1{font-size:28px;margin:0 0 4px}.sub{color:#6b6358;margin:0 0 20px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-bottom:22px}
+.card{background:#fffdf8;border-radius:24px;padding:22px 24px;box-shadow:0 2px 0 #e6dccb}
+.card h3{margin:0 0 4px;font-size:19px}.card p{margin:0 0 12px;color:#4a443c;font-size:14px;line-height:1.6}
+.stage{display:flex;align-items:center;justify-content:center;gap:24px;border-radius:16px;background:#f7f2e8;height:170px}
+.dark{background:#28326B}
+.icons{display:flex;gap:18px;align-items:flex-end;justify-content:center}
+.icons span{display:block;text-align:center;font-family:Plex;font-size:11px;color:#8a8070;margin-top:6px}
+</style></head><body>
+<h1>时间银行 · 文字标优化</h1><p class="sub">基于你选的 2a「间」里有光 + 2b timebank。中英文一套，并从字标里提炼出 App 图标。</p>
+<div class="row" id="r1"></div><div class="row" id="r2"></div><div class="row" id="r3"></div>
+<script>
+const GD='#1F4A33',G='#3E8A5E',A='#FFC870',I='#28326B',CR='#F3EEDF';
+let uid=0;
+// The 间 glyph itself; inner 日 recoloured via clipPath so the font's own strokes are kept.
+function jian(size,ink,glow,{halo=true}={}){const id='j'+(uid++);const w=size,h=size;
+ return `<svg width="${w}" height="${h}" viewBox="0 0 100 100" style="overflow:visible">
+ <defs><clipPath id="${id}"><rect x="28.5" y="22" width="44.5" height="59"/></clipPath>
+ <radialGradient id="${id}g"><stop offset="0" stop-color="${glow}" stop-opacity=".55"/><stop offset="1" stop-color="${glow}" stop-opacity="0"/></radialGradient></defs>
+ ${halo?`<ellipse cx="50" cy="52" rx="34" ry="36" fill="url(#${id}g)"/>`:''}
+ <text x="50" y="88" text-anchor="middle" font-family="NotoSerif" font-weight="900" font-size="100" fill="${ink}">间</text>
+ <text x="50" y="88" text-anchor="middle" font-family="NotoSerif" font-weight="900" font-size="100" fill="${glow}" clip-path="url(#${id})">间</text></svg>`}
+function zh(size,ink,glow){return `<div style="display:flex;white-space:nowrap;flex-shrink:0;align-items:center;font-family:NotoSerif;font-weight:900;font-size:${size}px;color:${ink};letter-spacing:.04em;line-height:1">时<span style="display:inline-block;width:1em;height:1em;margin:0 .02em;transform:translateY(.05em)">${jian(size,ink,glow)}</span>银行</div>`}
+function win(px,glow,ink){return `<svg width="${px}" height="${px*1.2}" viewBox="0 0 10 12" style="display:block"><path d="M1 12 V5 A4 4 0 0 1 9 5 V12Z" fill="${glow}" stroke="${ink}" stroke-width="0.9" stroke-linejoin="round"/><path d="M5 1.6 V12" stroke="${ink}" stroke-width="0.9"/><path d="M1 7.2 H9" stroke="${ink}" stroke-width="0.9"/></svg>`}
+function en(size,ink,glow){return `<div style="font-family:Nunito;font-weight:900;font-size:${size}px;color:${ink};letter-spacing:-.025em;line-height:1;white-space:nowrap">t<span style="display:inline-block;vertical-align:baseline;position:relative;width:.2em;height:.53em;margin:0 .06em 0 .08em;background:${ink};border-radius:.045em"><span style="position:absolute;left:50%;top:-.4em;transform:translateX(-50%);filter:drop-shadow(0 0 ${size*0.07}px ${glow})">${win(size*0.24,glow,ink)}</span></span>mebank</div>`}
+const app=(px,bg,ink,glow)=>`<div style="width:${px}px;height:${px}px;border-radius:${px*.23}px;background:${bg};display:grid;place-items:center">${jian(px*.78,ink,glow)}</div>`;
+r1.innerHTML=`
+<div class="card"><h3>2a 优化 ·「间」里有光</h3><p>直接用“间”字本身的笔画，只把门里的“日”点亮成暖黄，背后有一圈柔和的光晕，像门缝里透出的灯光。</p>
+<div class="stage">${zh(78,GD,A)}</div><div class="stage dark" style="height:120px;margin-top:10px">${zh(54,CR,A)}</div></div>
+<div class="card"><h3>2b 优化 · timebank</h3><p>“i”上的点变成一扇亮着灯的拱形小窗，带一点光晕。全小写圆体，亲切、国际化。</p>
+<div class="stage">${en(84,GD,A)}</div><div class="stage dark" style="height:120px;margin-top:10px">${en(58,CR,A)}</div></div>`;
+r2.innerHTML=`
+<div class="card"><h3>中英组合 · 横排</h3><p>网页顶栏、提交材料、视频片尾。</p>
+<div class="stage" style="gap:20px">${zh(48,GD,A)}<div style="width:2px;height:56px;background:#d8cdb8"></div>${en(46,G,A)}</div>
+<div class="stage dark" style="height:110px;margin-top:10px;gap:16px">${zh(40,CR,A)}<div style="width:2px;height:40px;background:#4a5490"></div>${en(38,CR,A)}</div></div>
+<div class="card"><h3>中英组合 · 竖排</h3><p>App 启动页、海报、Pitch 封面。</p>
+<div class="stage" style="flex-direction:column;gap:14px;height:280px">${zh(64,GD,A)}${en(40,G,A)}</div></div>`;
+r3.innerHTML=`
+<div class="card"><h3>App 图标 · 单个「间」</h3><p>从字标里提炼：一个发光的“间”字就是图标。白天绿、夜晚靛蓝两个版本，和 App 的昼夜切换一致。</p>
+<div class="stage" style="height:200px"><div class="icons">
+<div>${app(120,G,CR,A)}<span>day</span></div><div>${app(120,I,CR,A)}<span>night</span></div><div>${app(60,G,CR,A)}<span>60</span></div><div>${app(40,I,CR,A)}<span>40</span></div><div>${app(24,G,CR,A)}<span>24</span></div></div></div></div>
+<div class="card"><h3>英文场景图标 · 小窗</h3><p>海外场景可以用“i”上那扇亮着的小窗作为简化图标，和中文图标是同一套语言。</p>
+<div class="stage" style="height:200px"><div class="icons">
+<div><div style="width:120px;height:120px;border-radius:28px;background:${G};display:grid;place-items:center">${win(54,A,GD)}</div><span>day</span></div>
+<div><div style="width:120px;height:120px;border-radius:28px;background:${I};display:grid;place-items:center">${win(54,A,I)}</div><span>night</span></div>
+<div><div style="width:40px;height:40px;border-radius:10px;background:${G};display:grid;place-items:center">${win(18,A,GD)}</div><span>40</span></div></div></div></div>`;
+</script></body></html>
