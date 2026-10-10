@@ -1390,3 +1390,97 @@ h2 {
   margin: 0 auto;
   padding: 40px 16px;
 }
+
+/* ---------- comfort pass ---------- */
+:root[data-phase="night"] {
+  --wall: #1e232b;
+  --paper: #222831;
+  --paper-2: #2a313b;
+  --line: #3a414d;
+}
+.screen {
+  padding-bottom: calc(120px + env(safe-area-inset-bottom));
+}
+.categories {
+  gap: 14px 10px;
+}
+.category {
+  border: 0;
+  background: transparent;
+  padding: 4px 4px 8px;
+  border-radius: 20px;
+}
+.category .tile-wrap {
+  border-radius: 16px;
+  background: var(--wall);
+  box-shadow: 0 0 0 1px var(--line);
+}
+.category.on .tile-wrap {
+  box-shadow: 0 0 0 3px var(--glow), 0 10px 24px -12px var(--glow);
+}
+.category.on {
+  border: 0;
+  box-shadow: none;
+  font-weight: 600;
+}
+.choices {
+  grid-template-columns: repeat(2, 1fr);
+}
+.choice {
+  position: relative;
+  overflow: hidden;
+  white-space: nowrap;
+  background: transparent !important;
+  color: var(--ink) !important;
+  border-color: var(--line) !important;
+}
+.choice-pill {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: var(--ink);
+  z-index: 0;
+}
+.choice-label {
+  position: relative;
+  z-index: 1;
+}
+.choice.on .choice-label {
+  color: var(--paper);
+}
+.receipt {
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 16px 18px;
+  background: var(--paper);
+}
+.receipt-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.receipt-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #4caf7a;
+  box-shadow: 0 0 0 4px rgba(76, 175, 122, 0.2);
+}
+.receipt-time {
+  margin-left: auto;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #3f9a6a;
+}
+.receipt p {
+  margin: 0 0 6px;
+  font-size: 0.9rem;
+}
+.receipt-tx {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
