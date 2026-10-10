@@ -197,11 +197,17 @@ console.log("小赵 balance after guardian seal:", await balance(zhao));
 
 // 6. Simple mode for 妈妈: one number, three large buttons.
 await mom.page.goto(BASE + "#/");
-await mom.page.getByRole("button", { name: "长辈模式" }).click();
+async function toggleElder(p) {
+  await p.page.getByRole("button", { name: /设置/ }).click();
+  await p.page.getByRole("switch", { name: /长辈模式/ }).click();
+  await p.page.getByRole("button", { name: "好了" }).click();
+  await p.page.waitForSelector(".settings-sheet", { state: "detached" });
+}
+await toggleElder(mom);
 await mom.page.waitForSelector(".elder-home");
 await mom.page.waitForFunction(() => !document.querySelector(".elder-balance strong")?.textContent?.includes("…"));
 await shot(mom, "15-elder-home");
-await mom.page.getByRole("button", { name: "长辈模式" }).click();
+await toggleElder(mom);
 
 // 7. English locale renders the wax-seal style.
 await wang.page.goto(BASE + "#/");

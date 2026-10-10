@@ -7,10 +7,10 @@ import { createPasskey, passkeysSupported, signWithPasskey } from "./passkey";
 import * as chain from "./chain";
 import { stampFeedback } from "./feedback";
 import { CopyLink, ErrorNote, QR, Screen, errorMessage } from "./ui";
-import { usePhase, type Phase } from "./theme";
+import { usePhase, THEME_PREFS, type Phase, type ThemePref } from "./theme";
 import { Wordmark } from "./Brand";
 import { CountUp, Door, Facade, Garland, PaperPlane, TILE, WindowTile, spring } from "./Windows";
-import { Onboarding } from "./Onboarding";
+import { Onboarding, Street } from "./Onboarding";
 import { configureVoice, speak, speakFromTap, useSpeakOnShow, voiceSupported } from "./voice";
 
 // ---------- routing & app state ----------
@@ -46,7 +46,7 @@ function writePref(key: string, value: string) {
   }
 }
 
-type Ctx = { s: Strings; lang: Lang; phase: Phase; me: Me | null; setMe: (m: Me) => void; elder: boolean };
+type Ctx = { s: Strings; lang: Lang; phase: Phase; me: Me | null; setMe: (m: Me) => void; elder: boolean; toggleElder: () => void };
 
 const tileFor = (category: number) => CATEGORIES.find((c) => c.id === category)?.tile ?? 4;
 
@@ -79,7 +79,7 @@ function useAsync() {
 
 // ---------- screens ----------
 
-function Welcome({ s, phase, setMe }: Ctx) {
+function Welcome({ s, phase, setMe, elder, toggleElder }: Ctx) {
   const [seen, setSeen] = useState(() => readPref("timebank.onboarded", "0") === "1");
   const [splash, setSplash] = useState(true);
   const [name, setName] = useState("");
@@ -123,30 +123,37 @@ function Welcome({ s, phase, setMe }: Ctx) {
 
   return (
     <main className="welcome">
-      <div className="welcome-window">
-        <WindowTile phase={phase} tile={TILE.you} lit={false} />
+      <div className="welcome-art" aria-hidden>
+        <Street phase={phase} />
       </div>
-      <Wordmark size={44} animated />
-      <p className="tagline">{s.tagline}</p>
-      {!passkeysSupported() ? (
-        <p className="note error">{s.noPasskey}</p>
-      ) : (
-        <div className="sheet">
-          <label className="field">
-            <span>{s.namePrompt}</span>
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder={s.namePlaceholder} maxLength={20} />
-            <small>{s.nameHint}</small>
-          </label>
-          <button className="primary" disabled={busy} onClick={create}>
-            {busy ? s.creating : s.createPasskey}
+      <div className="welcome-copy">
+        <Wordmark size={48} animated />
+        <p className="tagline">{s.tagline}</p>
+        {!passkeysSupported() ? (
+          <p className="note error">{s.noPasskey}</p>
+        ) : (
+          <div className="welcome-form">
+            <label className="field">
+              <span>{s.namePrompt}</span>
+              <input value={name} onChange={(e) => setName(e.target.value)} placeholder={s.namePlaceholder} maxLength={20} />
+              <small>{s.nameHint}</small>
+            </label>
+            <button className="primary" disabled={busy} onClick={create}>
+              {busy ? s.creating : s.createPasskey}
+            </button>
+            <button className="link" disabled={busy} onClick={signIn}>
+              {s.signInExisting}
+            </button>
+            {error && <ErrorNote error={error} s={s} />}
+          </div>
+        )}
+        {!elder && (
+          <button className="link elder-link" onClick={toggleElder}>
+            {s.textTooSmall}
           </button>
-          <button className="link" disabled={busy} onClick={signIn}>
-            {s.signInExisting}
-          </button>
-          {error && <ErrorNote error={error} s={s} />}
-        </div>
-      )}
-      <p className="ethics">{s.ethics}</p>
+        )}
+        <p className="ethics">{s.ethics}</p>
+      </div>
     </main>
   );
 }
@@ -1028,7 +1035,9 @@ export default function App() {
   const [big, setBig] = useState(() => readPref("timebank.big", "0") === "1");
   const [voice, setVoice] = useState(() => readPref("timebank.voice", "0") === "1");
   const params = new URLSearchParams(window.location.search);
-  const phase = usePhase((params.get("phase") as Phase | null) ?? null);
+  const [themePref, setThemePref] = useState<ThemePref>(() => readPref("timebank.theme", "time") as ThemePref);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const phase = usePhase(themePref, (params.get("phase") as Phase | null) ?? null);
   const [me, setMeState] = useState<Me | null>(loadMe);
   const s = strings[lang];
 
@@ -1046,12 +1055,36 @@ export default function App() {
     saveMe(m);
     setMeState(m);
   };
-  const ctx: Ctx = { s, lang, phase, me, setMe, elder: big };
   const [voiceHint, setVoiceHint] = useState(false);
   const showVoiceHint = () => {
     setVoiceHint(true);
     setTimeout(() => setVoiceHint(false), 7000);
   };
+  const toggleVoice = () => {
+    const next = !voice;
+    setVoice(next);
+    writePref("timebank.voice", next ? "1" : "0");
+    configureVoice(next, lang);
+    if (next) {
+      speakFromTap(s.voiceOn);
+      showVoiceHint();
+    }
+  };
+  const toggleElder = () => {
+    const next = !big;
+    setBig(next);
+    writePref("timebank.big", next ? "1" : "0");
+    // Simple mode reads every screen aloud; the tap itself unlocks speech on iOS.
+    if (next && voiceSupported()) {
+      setVoice(true);
+      writePref("timebank.voice", "1");
+      configureVoice(true, lang);
+      // Short, because the simple home screen reads its own guidance right after.
+      speakFromTap(s.elderMode);
+      showVoiceHint();
+    }
+  };
+  const ctx: Ctx = { s, lang, phase, me, setMe, elder: big, toggleElder };
 
   const [page, arg, arg2] = route;
   let body;
@@ -1077,54 +1110,72 @@ export default function App() {
 
   return (
     <>
-      <header className="topbar">
+      <header className={page || me ? "topbar" : "topbar bare"}>
         <button className="brand-mini" onClick={() => go("/")} aria-label={s.home}>
           <Wordmark size={22} />
         </button>
         <div className="prefs">
-          {voiceSupported() && (
-            <button
-              className="chip"
-              aria-pressed={voice}
-              onClick={() => {
-                const next = !voice;
-                setVoice(next);
-                writePref("timebank.voice", next ? "1" : "0");
-                configureVoice(next, lang);
-                if (next) {
-                  speakFromTap(s.voiceOn);
-                  showVoiceHint();
-                }
-              }}
-            >
-              <span aria-hidden>{voice ? "🔊" : "🔈"}</span> {s.voice}
-            </button>
-          )}
-          <button
-            className="chip"
-            aria-pressed={big}
-            onClick={() => {
-              const next = !big;
-              setBig(next);
-              writePref("timebank.big", next ? "1" : "0");
-              // Simple mode reads every screen aloud; the tap itself unlocks speech on iOS.
-              if (next && voiceSupported()) {
-                setVoice(true);
-                writePref("timebank.voice", "1");
-                configureVoice(true, lang);
-                // Short, because the simple home screen reads its own guidance right after.
-                speakFromTap(s.elderMode);
-                showVoiceHint();
-              }
-            }}
-          >
-            {s.elderMode}
-          </button>
           <button className="chip" onClick={() => { const next = lang === "zh" ? "en" : "zh"; setLang(next); writePref("timebank.lang", next); }}>
             {s.language}
           </button>
+          <button className="chip settings-btn" aria-expanded={settingsOpen} onClick={() => setSettingsOpen(true)}>
+            <span aria-hidden>{voice ? "🔊" : "Aa"}</span> {s.settings}
+          </button>
         </div>
       </header>
+      <AnimatePresence>
+        {settingsOpen && (
+          <motion.div className="overlay" onClick={() => setSettingsOpen(false)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <motion.section
+              className="settings-sheet"
+              role="dialog"
+              aria-label={s.settings}
+              onClick={(e) => e.stopPropagation()}
+              initial={{ y: 40, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 40, opacity: 0 }}
+              transition={spring}
+            >
+              <h2>{s.settings}</h2>
+              {voiceSupported() && (
+                <button className="setting-row" role="switch" aria-checked={voice} onClick={toggleVoice}>
+                  <span>
+                    {s.voice}
+                    <small>{s.voiceDesc}</small>
+                  </span>
+                  <span className="switch" aria-hidden />
+                </button>
+              )}
+              <button className="setting-row" role="switch" aria-checked={big} onClick={toggleElder}>
+                <span>
+                  {s.elderMode}
+                  <small>{s.elderDesc}</small>
+                </span>
+                <span className="switch" aria-hidden />
+              </button>
+              <p className="setting-label">{s.theme}</p>
+              <div className="theme-options" role="radiogroup" aria-label={s.theme}>
+                {THEME_PREFS.map((t) => (
+                  <button
+                    key={t}
+                    role="radio"
+                    aria-checked={t === themePref}
+                    className={t === themePref ? "theme-option on" : "theme-option"}
+                    onClick={() => {
+                      setThemePref(t);
+                      writePref("timebank.theme", t);
+                      speak(s.themeOptions[t]);
+                    }}
+                  >
+                    {s.themeOptions[t]}
+                  </button>
+                ))}
+              </div>
+              <button className="secondary" onClick={() => setSettingsOpen(false)}>{s.done}</button>
+            </motion.section>
+          </motion.div>
+        )}
+      </AnimatePresence>
       <MotionConfig reducedMotion="user">
         <AnimatePresence mode="wait">
           <motion.div
