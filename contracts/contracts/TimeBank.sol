@@ -54,6 +54,7 @@ contract TimeBank {
     event Donated(uint32 minutes_);
     event Granted(bytes32 indexed to, uint32 minutes_);
     event Certified(bytes32 indexed id, bytes32 community);
+    event PresenceVerified(bytes32 indexed challenge, bytes32 indexed id, bytes32 community);
 
     error NotSteward();
     error AlreadyRegistered();
@@ -198,6 +199,14 @@ contract TimeBank {
         if (!m.exists) return (false, bytes32(0));
         ok = challenge.verify(sig, m.x, m.y);
         community = ok ? certifiedCommunity[id] : bytes32(0);
+    }
+
+    /// @notice Same check as verifyPresence, but published on-chain so the host's screen,
+    /// which only knows the challenge it displayed, sees the result within a block.
+    function checkIn(bytes32 id, bytes32 challenge, WebAuthnP256.Assertion calldata sig) external {
+        Member storage m = _member(id);
+        if (!challenge.verify(sig, m.x, m.y)) revert BadSignature(id);
+        emit PresenceVerified(challenge, id, certifiedCommunity[id]);
     }
 
     function sealsOf(bytes32 id) external view returns (uint256[] memory) {

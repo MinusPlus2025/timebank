@@ -180,6 +180,22 @@ describe("TimeBank", () => {
       expect(got).to.equal(ethers.ZeroHash);
     });
 
+    it("publishes a check-in the host can watch for", async () => {
+      const community = ethers.encodeBytes32String("Sunrise Community");
+      await bank.certify(bobId, community);
+      const challenge = ethers.hexlify(ethers.randomBytes(32));
+      await expect(bank.checkIn(bobId, challenge, bob.sign(challenge)))
+        .to.emit(bank, "PresenceVerified")
+        .withArgs(challenge, bobId, community);
+    });
+
+    it("rejects an impostor check-in", async () => {
+      const challenge = ethers.hexlify(ethers.randomBytes(32));
+      await expect(bank.checkIn(bobId, challenge, new Passkey().sign(challenge)))
+        .to.be.revertedWithCustomError(bank, "BadSignature")
+        .withArgs(bobId);
+    });
+
     it("rejects a signature over a different challenge", async () => {
       const challenge = ethers.hexlify(ethers.randomBytes(32));
       const stale = ethers.hexlify(ethers.randomBytes(32));
