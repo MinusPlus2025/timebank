@@ -31,19 +31,24 @@ export function idOf(x: Hex, y: Hex): Hex {
 /** A short, friendly label for a member id, e.g. "A3F2". Names are never stored on-chain. */
 export const shortId = (id: Hex) => id.slice(2, 6).toUpperCase();
 
-/** What the person being thanked hands to their helper: everything needed to co-sign the seal. */
-export type SealPayload = { h: Hex; r: Hex; m: number; c: number; d: boolean; a: Assertion };
+/** What the first signer hands to the second: everything needed to co-sign the seal.
+ * v: the helper's door arrival (zero if none); t: deadline in seconds since 1970. */
+export type SealPayload = { h: Hex; r: Hex; m: number; c: number; d: boolean; v: Hex; t: number; a: Assertion };
+
+const ZERO32 = "0x0000000000000000000000000000000000000000000000000000000000000000" as Hex;
 
 const toB64url = (b: Uint8Array) =>
   btoa(String.fromCharCode(...b)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 const fromB64url = (s: string) => Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
 
 // Packed binary keeps the QR code sparse enough for older phone cameras:
-// helper(32) receiver(32) minutes(2) category(1) redeem(1) authDataLen(1) authData r(32) s(32) clientDataSuffix(utf8)
+// helper(32) receiver(32) minutes(2) category(1) flags(1) deadline(4) [visit(32) if flag] authDataLen(1) authData r(32) s(32) clientDataSuffix(utf8)
+// flags: bit0 redeem, bit1 has visit
 export function encodeSealPayload(p: SealPayload): string {
   const auth = hexToBytes(p.a.authenticatorData);
   const suffix = new TextEncoder().encode(p.a.clientDataSuffix);
-  const out = new Uint8Array(32 + 32 + 2 + 1 + 1 + 1 + auth.length + 64 + suffix.length);
+  const hasVisit = p.v !== ZERO32;
+  const out = new Uint8Array(32 + 32 + 2 + 1 + 1 + 4 + (hasVisit ? 32 : 0) + 1 + auth.length + 64 + suffix.length);
   let i = 0;
   const put = (b: Uint8Array) => {
     out.set(b, i);
@@ -51,7 +56,10 @@ export function encodeSealPayload(p: SealPayload): string {
   };
   put(hexToBytes(p.h));
   put(hexToBytes(p.r));
-  put(new Uint8Array([p.m >> 8, p.m & 0xff, p.c, p.d ? 1 : 0, auth.length]));
+  put(new Uint8Array([p.m >> 8, p.m & 0xff, p.c, (p.d ? 1 : 0) | (hasVisit ? 2 : 0)]));
+  put(new Uint8Array([p.t >>> 24, (p.t >>> 16) & 0xff, (p.t >>> 8) & 0xff, p.t & 0xff]));
+  if (hasVisit) put(hexToBytes(p.v));
+  put(new Uint8Array([auth.length]));
   put(auth);
   put(hexToBytes(p.a.r));
   put(hexToBytes(p.a.s));
@@ -65,16 +73,22 @@ export function decodeSealPayload(s: string): SealPayload {
   const take = (n: number) => b.slice(i, (i += n));
   const h = bytesToHex(take(32));
   const r = bytesToHex(take(32));
-  const [m1, m2, c, d, authLen] = take(5);
+  const [m1, m2, c, flags] = take(4);
+  const [t1, t2, t3, t4] = take(4);
+  const v = flags & 2 ? bytesToHex(take(32)) : ZERO32;
+  const [authLen] = take(1);
   const authenticatorData = bytesToHex(take(authLen));
   const sigR = bytesToHex(take(32));
   const sigS = bytesToHex(take(32));
   const clientDataSuffix = new TextDecoder().decode(b.slice(i));
-  return { h, r, m: (m1 << 8) | m2, c, d: d === 1, a: { authenticatorData, clientDataSuffix, r: sigR, s: sigS } };
+  const t = ((t1 << 24) | (t2 << 16) | (t3 << 8) | t4) >>> 0;
+  return { h, r, m: (m1 << 8) | m2, c, d: (flags & 1) === 1, v, t, a: { authenticatorData, clientDataSuffix, r: sigR, s: sigS } };
 }
 
 // Relatives this device looks after as guardian. Names stay local, like the user's own name.
-export type FamilyMember = { id: Hex; name: string };
+// secret: printed only on the family card; it blinds door arrivals so the chain does not
+// reveal when this household has a visitor.
+export type FamilyMember = { id: Hex; name: string; secret: Hex };
 const FAMILY_KEY = "timebank.family";
 
 export function loadFamily(): FamilyMember[] {
@@ -90,5 +104,43 @@ export function addFamily(f: FamilyMember) {
     localStorage.setItem(FAMILY_KEY, JSON.stringify([...loadFamily().filter((x) => x.id !== f.id), f]));
   } catch {
     /* private mode: the account still exists on-chain */
+  }
+}
+
+const pack = (types: string[], values: unknown[]) =>
+  keccak256(encodeAbiParameters(types.map((type) => ({ type })), values));
+
+/** The blinded tag the contract records for an arrival: keccak256(secret, nonce). */
+export const arrivalTag = (secret: Hex, nonce: Hex) => pack(["bytes32", "bytes32"], [secret, nonce]);
+
+/** visitId as the contract derives it: keccak256(visitor, challenge). */
+export const visitIdOf = (visitor: Hex, challenge: Hex) => pack(["bytes32", "bytes32"], [visitor, challenge]);
+
+/** Where the helper was, as a commitment only someone with the card secret can check (~100 m). */
+export async function locationCommitment(secret: Hex, nonce: Hex): Promise<Hex> {
+  const pos = await new Promise<GeolocationPosition | null>((resolve) => {
+    if (!navigator.geolocation) return resolve(null);
+    navigator.geolocation.getCurrentPosition(resolve, () => resolve(null), { timeout: 5000, maximumAge: 60000 });
+  });
+  if (!pos) return ZERO32;
+  const e3 = (v: number) => BigInt(Math.round(v * 1000));
+  return pack(["bytes32", "bytes32", "int256", "int256"], [secret, nonce, e3(pos.coords.latitude), e3(pos.coords.longitude)]);
+}
+
+// The helper's own open arrival per household, so the seal can point at it.
+const VISITS_KEY = "timebank.visits";
+export function rememberVisit(receiver: Hex, visitId: Hex) {
+  try {
+    const all = JSON.parse(localStorage.getItem(VISITS_KEY) || "{}");
+    localStorage.setItem(VISITS_KEY, JSON.stringify({ ...all, [receiver]: visitId }));
+  } catch {
+    /* without it the seal simply carries no arrival */
+  }
+}
+export function recalledVisit(receiver: Hex): Hex | null {
+  try {
+    return (JSON.parse(localStorage.getItem(VISITS_KEY) || "{}")[receiver] as Hex) ?? null;
+  } catch {
+    return null;
   }
 }

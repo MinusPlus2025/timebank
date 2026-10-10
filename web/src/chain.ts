@@ -31,9 +31,25 @@ export function memberId(x: Hex, y: Hex): Promise<Hex> {
   return client.readContract({ ...contract, functionName: "memberId", args: [x, y] });
 }
 
-export function sealDigest(helper: Hex, receiver: Hex, minutes: number, category: number, redeem: boolean) {
-  return client.readContract({ ...contract, functionName: "sealDigest", args: [helper, receiver, minutes, category, redeem] });
+/** What both people sign for one seal; mirrors TimeBank.SealRequest. */
+export type SealRequest = {
+  helper: Hex;
+  receiver: Hex;
+  minutes_: number;
+  category: number;
+  redeem: boolean;
+  visitId: Hex;
+  deadline: number;
+};
+
+export const NO_VISIT = "0x0000000000000000000000000000000000000000000000000000000000000000" as Hex;
+
+export function sealDigest(q: SealRequest) {
+  return client.readContract({ ...contract, functionName: "sealDigest", args: [{ ...q, deadline: BigInt(q.deadline) }] });
 }
+
+/** Seconds since 1970, the unit of seal deadlines. */
+export const nowSeconds = () => Math.floor(Date.now() / 1000);
 
 export function giftDigest(from: Hex, to: Hex, minutes: number) {
   return client.readContract({ ...contract, functionName: "giftDigest", args: [from, to, minutes] });
@@ -80,8 +96,13 @@ export function dependentDigest(guardian: Hex) {
   return client.readContract({ ...contract, functionName: "dependentDigest", args: [guardian] });
 }
 
-export function visitDigest(host: Hex, challenge: Hex) {
-  return client.readContract({ ...contract, functionName: "visitDigest", args: [host, challenge] });
+export function arriveDigest(tag: Hex, nonce: Hex, locationHash: Hex, challenge: Hex) {
+  return client.readContract({ ...contract, functionName: "arriveDigest", args: [tag, nonce, locationHash, challenge] });
+}
+
+export async function getVisit(id: Hex) {
+  const [visitor, start, closed, tag, nonce] = await client.readContract({ ...contract, functionName: "visits", args: [id] });
+  return { visitor, start: Number(start), closed, tag, nonce };
 }
 
 export function getGuardian(id: Hex) {
@@ -90,7 +111,7 @@ export function getGuardian(id: Hex) {
 
 export const hasGuardian = (g: Hex) => BigInt(g) !== 0n;
 
-type RelayFn = "register" | "seal" | "gift" | "donate" | "checkIn" | "registerDependent" | "sealByGuardian" | "visit";
+type RelayFn = "register" | "seal" | "gift" | "donate" | "checkIn" | "registerDependent" | "sealByGuardian" | "arrive";
 
 export async function relay(fn: RelayFn, args: unknown[]): Promise<{ hash: Hex }> {
   const res = await fetch("/api/relay", {
@@ -116,9 +137,15 @@ export async function findCheckIn(challenge: Hex, fromBlock: bigint) {
   return logs[0]?.args;
 }
 
-/** Recent verified visitors at the doors of the given members (for their guardian). */
-export async function findVisits(hosts: Hex[], fromBlock: bigint) {
-  if (!hosts.length) return [];
-  const logs = await client.getContractEvents({ ...contract, eventName: "Visited", args: { host: hosts }, fromBlock });
-  return logs.map((l) => ({ host: l.args.host!, visitor: l.args.visitor!, community: l.args.community!, block: l.blockNumber }));
+/** Recent verified arrivals at any door; callers recognise their own household by its tag. */
+export async function findArrivals(fromBlock: bigint) {
+  const logs = await client.getContractEvents({ ...contract, eventName: "Arrived", fromBlock });
+  return logs.map((l) => ({
+    visitId: l.args.visitId!,
+    visitor: l.args.visitor!,
+    tag: l.args.tag!,
+    nonce: l.args.nonce!,
+    community: l.args.community!,
+    block: l.blockNumber,
+  }));
 }

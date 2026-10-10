@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import { hexToString, toHex, type Hex } from "viem";
 import { CATEGORIES, detectLang, formatHours, formatMinutes, strings, type Lang, type Strings } from "./i18n";
-import { idOf, loadMe, saveMe, shortId, encodeSealPayload, decodeSealPayload, loadFamily, addFamily, type Me, type SealPayload } from "./identity";
+import { idOf, loadMe, saveMe, shortId, encodeSealPayload, decodeSealPayload, loadFamily, addFamily, arrivalTag, visitIdOf, locationCommitment, rememberVisit, recalledVisit, type Me, type SealPayload } from "./identity";
 import { createPasskey, passkeysSupported, signWithPasskey } from "./passkey";
 import * as chain from "./chain";
 import { stampFeedback } from "./feedback";
@@ -152,24 +152,67 @@ function Welcome({ s, phase, setMe }: Ctx) {
 }
 
 const familyName = (id: Hex, s: Strings) => loadFamily().find((f) => f.id === id)?.name || `${s.someone} ${shortId(id)}`;
+const clock = (seconds: number, lang: Lang) =>
+  new Date(seconds * 1000).toLocaleTimeString(lang === "zh" ? "zh-CN" : "en-GB", { hour: "2-digit", minute: "2-digit" });
+const randomHex = () => toHex(crypto.getRandomValues(new Uint8Array(32)));
+const requestOf = (p: SealPayload): chain.SealRequest => ({ helper: p.h, receiver: p.r, minutes_: p.m, category: p.c, redeem: p.d, visitId: p.v, deadline: p.t });
+const friendlyError = (error: string, s: Strings) => (/Expired/.test(error) ? s.expired : error);
+
+/** The helper's arrival behind a seal, if any: when it started and how long they have been there. */
+type Arrival = { start: number; minutes: number; atHome: boolean | null };
+
+/** The helper's arrival behind a seal, if any: when it started, how long they have been there,
+ * and, when the household secret is known, whether it really was at this household's door. */
+function useArrival(visitId: Hex | null | undefined, helper: Hex, secret?: Hex) {
+  const [arrival, setArrival] = useState<Arrival | null>(null);
+  useEffect(() => {
+    if (!visitId || visitId === chain.NO_VISIT) return setArrival(null);
+    chain
+      .getVisit(visitId)
+      .then((v) =>
+        setArrival(
+          v.visitor === helper && !v.closed && v.start
+            ? { start: v.start, minutes: Math.floor((chain.nowSeconds() - v.start) / 60), atHome: secret ? arrivalTag(secret, v.nonce) === v.tag : null }
+            : null
+        )
+      )
+      .catch(() => setArrival(null));
+  }, [visitId, helper, secret]);
+  return arrival;
+}
+
+function ArrivalLine({ s, lang, arrival, claimed }: { s: Strings; lang: Lang; arrival: Arrival | null; claimed: number }) {
+  if (!arrival) return null;
+  if (arrival.atHome === false) return <p className="note warn small">{s.notThisDoor}</p>;
+  return (
+    <>
+      <p className="arrival">{s.arrivedAt(clock(arrival.start, lang), arrival.minutes)}</p>
+      {claimed > arrival.minutes && <p className="note warn small">{s.overClaim}</p>}
+    </>
+  );
+}
+
 const communityName = (c: Hex) => (BigInt(c) !== 0n ? hexToString(c, { size: 32 }).replace(/\0/g, "") : "");
 
 /** Watches for verified visitors at the doors of the family this device looks after. */
 function useFamilyVisits(s: Strings) {
   const [notice, setNotice] = useState("");
   useEffect(() => {
-    const hosts = loadFamily().map((f) => f.id);
-    if (!hosts.length) return;
+    const family = loadFamily().filter((f) => f.secret);
+    if (!family.length) return;
     let stop = false;
     let from: bigint | null = null;
     const tick = async () => {
       try {
         from ??= (await chain.client.getBlockNumber()) - 5n;
-        const visits = await chain.findVisits(hosts, from);
-        const last = visits[visits.length - 1];
+        const arrivals = await chain.findArrivals(from);
+        if (arrivals.length) from = arrivals[arrivals.length - 1].block + 1n;
+        const mine = arrivals
+          .map((a) => ({ a, home: family.find((f) => arrivalTag(f.secret, a.nonce) === a.tag) }))
+          .filter((x) => x.home);
+        const last = mine[mine.length - 1];
         if (last && !stop) {
-          from = last.block + 1n;
-          const text = s.familyVisit(shortId(last.visitor), familyName(last.host, s), communityName(last.community));
+          const text = s.familyVisit(shortId(last.a.visitor), last.home!.name, communityName(last.a.community));
           setNotice(text);
           speak(text);
           stampFeedback();
@@ -397,7 +440,7 @@ function ScanHelp({ s, phase }: Ctx) {
   );
 }
 
-function Person({ s, phase, me, id }: Ctx & { id: Hex }) {
+function Person({ s, phase, me, id, secret }: Ctx & { id: Hex; secret?: Hex }) {
   if (me && me.id === id)
     return (
       <Screen s={s} title={s.scanTitle} onBack={() => go("/")}>
@@ -405,10 +448,10 @@ function Person({ s, phase, me, id }: Ctx & { id: Hex }) {
         <p className="instruction">{s.ownCode}</p>
       </Screen>
     );
-  return <PersonActions s={s} phase={phase} me={me} id={id} />;
+  return <PersonActions s={s} phase={phase} me={me} id={id} secret={secret} />;
 }
 
-function PersonActions({ s, phase, me, id }: { s: Strings; phase: Phase; me: Me | null; id: Hex }) {
+function PersonActions({ s, phase, me, id, secret }: { s: Strings; phase: Phase; me: Me | null; id: Hex; secret?: Hex }) {
   const [guarded, setGuarded] = useState(false);
   const [atDoor, setAtDoor] = useState(false);
   const { busy, error, run } = useAsync();
@@ -418,9 +461,14 @@ function PersonActions({ s, phase, me, id }: { s: Strings; phase: Phase; me: Me 
   const arrive = () =>
     run(async () => {
       if (!me) throw new Error("wrong-person");
-      const challenge = toHex(crypto.getRandomValues(new Uint8Array(32)));
-      const { assertion } = await signAs(await chain.visitDigest(id, challenge), me.id);
-      await chain.relay("visit", [me.id, id, challenge, chain.toArgs(assertion)]);
+      if (!secret) throw new Error(s.cardNeeded);
+      const nonce = randomHex();
+      const challenge = randomHex();
+      const tag = arrivalTag(secret, nonce);
+      const location = await locationCommitment(secret, nonce);
+      const { assertion } = await signAs(await chain.arriveDigest(tag, nonce, location, challenge), me.id);
+      await chain.relay("arrive", [me.id, tag, nonce, location, challenge, chain.toArgs(assertion)]);
+      rememberVisit(id, visitIdOf(me.id, challenge));
       setAtDoor(true);
     });
   if (guarded)
@@ -429,7 +477,13 @@ function PersonActions({ s, phase, me, id }: { s: Strings; phase: Phase; me: Me 
         <div className="person-window"><WindowTile phase={phase} tile={TILE.family} /></div>
         <p className="muted center-text">{s.guardianNote}</p>
         <div className="stack">
-          {atDoor ? <p className="note ok">{s.atDoorDone}</p> : <button className="primary" disabled={busy} onClick={arrive}>{s.atDoor}</button>}
+          {atDoor ? (
+            <p className="note ok">{s.atDoorDone}</p>
+          ) : secret ? (
+            <button className="primary" disabled={busy} onClick={arrive}>{s.atDoor}</button>
+          ) : (
+            <p className="muted center-text">{s.cardNeeded}</p>
+          )}
           <button className="secondary" onClick={() => go(`/helped/${id}`)}>{s.helpedThem}</button>
           <button className="link" onClick={() => go(`/gift/${id}`)}>{s.giftTo}</button>
         </div>
@@ -508,9 +562,10 @@ function Thank({ s, lang, phase, me, helper }: Ctx & { me: Me; helper: Hex }) {
   const sign = () =>
     run(async () => {
       if (helper === me.id) throw new Error(lang === "zh" ? "不能感谢自己" : "You can't thank yourself");
-      const digest = await chain.sealDigest(helper, me.id, minutes, category, redeem);
-      const { assertion } = await signAs(digest, me.id);
-      const p: SealPayload = { h: helper, r: me.id, m: minutes, c: category, d: redeem, a: assertion };
+      // Short-lived on purpose: the helper should scan it in person, not receive it hours later.
+      const q: chain.SealRequest = { helper, receiver: me.id, minutes_: minutes, category, redeem, visitId: chain.NO_VISIT, deadline: chain.nowSeconds() + 300 };
+      const { assertion } = await signAs(await chain.sealDigest(q), me.id);
+      const p: SealPayload = { h: helper, r: me.id, m: minutes, c: category, d: redeem, v: q.visitId, t: q.deadline, a: assertion };
       setPayload(encodeSealPayload(p));
     });
 
@@ -522,6 +577,7 @@ function Thank({ s, lang, phase, me, helper }: Ctx & { me: Me; helper: Hex }) {
         <div className="sheet center">
           <QR value={url} label={s.showToHelper} />
           <p className="instruction">{s.showToHelper}</p>
+          <p className="muted small">{s.expiresHint}</p>
           <CopyLink url={url} s={s} />
         </div>
       </Screen>
@@ -564,11 +620,12 @@ function Confirm({ s, lang, phase, me, setMe, raw }: Ctx & { raw: string }) {
 
   const seal = () =>
     run(async () => {
-      const digest = await chain.sealDigest(p.h, p.r, p.m, p.c, p.d);
-      const helper = await signAs(digest, p.h);
+      if (chain.nowSeconds() > p.t) throw new Error("Expired");
+      const q = requestOf(p);
+      const helper = await signAs(await chain.sealDigest(q), p.h);
       if (!me) setMe({ id: helper.id, x: helper.x, y: helper.y, name: "" });
       const t0 = performance.now();
-      const { hash } = await chain.relay("seal", [p.h, p.r, p.m, p.c, p.d, chain.toArgs(helper.assertion), chain.toArgs(p.a)]);
+      const { hash } = await chain.relay("seal", [q, chain.toArgs(helper.assertion), chain.toArgs(p.a)]);
       setSeconds(((performance.now() - t0) / 1000).toFixed(1));
       setDone(hash);
       setTimeout(stampFeedback, 900);
@@ -594,7 +651,7 @@ function Confirm({ s, lang, phase, me, setMe, raw }: Ctx & { raw: string }) {
         <p className="instruction">{s.confirmBody(formatMinutes(p.m, s), cat[lang])}</p>
         <p className="muted small">{s.someone} {shortId(p.r)}</p>
         <button className="primary" disabled={busy} onClick={seal}>{busy ? s.sealing : s.signSeal}</button>
-        {error && <ErrorNote error={error === "wrong-person" ? s.wrongPerson : error} s={s} />}
+        {error && <ErrorNote error={error === "wrong-person" ? s.wrongPerson : friendlyError(error, s)} s={s} />}
       </div>
     </Screen>
   );
@@ -700,7 +757,7 @@ function Donate({ s, me }: Ctx & { me: Me }) {
   );
 }
 
-function DoorCheck({ s, phase, me }: Ctx) {
+function DoorCheck({ s, phase }: Ctx) {
   const [challenge] = useState(() => toHex(crypto.getRandomValues(new Uint8Array(32))));
   const [result, setResult] = useState<{ id: Hex; community: Hex } | null>(null);
   useEffect(() => {
@@ -736,7 +793,7 @@ function DoorCheck({ s, phase, me }: Ctx) {
         </Door>
       ) : (
         <div className="sheet center door-qr">
-          <QR value={appUrl(me ? `/checkin/${challenge}/${me.id}` : `/checkin/${challenge}`)} label={s.doorTitle} />
+          <QR value={appUrl(`/checkin/${challenge}`)} label={s.doorTitle} />
         </div>
       )}
       {result ? (
@@ -754,23 +811,15 @@ function DoorCheck({ s, phase, me }: Ctx) {
   );
 }
 
-function CheckIn({ s, me, setMe, challenge, host }: Ctx & { challenge: Hex; host?: Hex }) {
+function CheckIn({ s, me, setMe, challenge }: Ctx & { challenge: Hex }) {
   const [done, setDone] = useState(false);
   const { busy, error, run } = useAsync();
   useSpeakOnShow(done ? s.checkedIn : `${s.checkInTitle}。${s.checkInBody}`);
   const prove = () =>
     run(async () => {
-      if (host) {
-        // Signing which door we're at needs to know who we are first.
-        const who = me ?? (await signAs(toHex(crypto.getRandomValues(new Uint8Array(32)))));
-        if (!me) setMe({ id: who.id, x: who.x, y: who.y, name: "" });
-        const r = await signAs(await chain.visitDigest(host, challenge), who.id);
-        await chain.relay("visit", [r.id, host, challenge, chain.toArgs(r.assertion)]);
-      } else {
-        const r = await signAs(challenge, me?.id);
-        if (!me) setMe({ id: r.id, x: r.x, y: r.y, name: "" });
-        await chain.relay("checkIn", [r.id, challenge, chain.toArgs(r.assertion)]);
-      }
+      const r = await signAs(challenge, me?.id);
+      if (!me) setMe({ id: r.id, x: r.x, y: r.y, name: "" });
+      await chain.relay("checkIn", [r.id, challenge, chain.toArgs(r.assertion)]);
       setDone(true);
     });
   return (
@@ -795,13 +844,24 @@ function HelpedFor({ s, lang, phase, me, receiver }: Ctx & { me: Me; receiver: H
     chain.getMember(receiver).then((m) => setBalance(m.balance)).catch(() => undefined);
   }, [receiver]);
   const redeem = balance >= minutes;
+  const [visitId] = useState(() => recalledVisit(receiver));
+  const arrival = useArrival(visitId, me.id);
   const sign = () =>
     run(async () => {
-      const digest = await chain.sealDigest(me.id, receiver, minutes, category, redeem);
-      const { assertion } = await signAs(digest, me.id);
-      setPayload(encodeSealPayload({ h: me.id, r: receiver, m: minutes, c: category, d: redeem, a: assertion }));
+      // The guardian confirms remotely, so the window is a day rather than minutes.
+      const q: chain.SealRequest = {
+        helper: me.id,
+        receiver,
+        minutes_: minutes,
+        category,
+        redeem,
+        visitId: arrival && visitId ? visitId : chain.NO_VISIT,
+        deadline: chain.nowSeconds() + 24 * 3600,
+      };
+      const { assertion } = await signAs(await chain.sealDigest(q), me.id);
+      setPayload(encodeSealPayload({ h: me.id, r: receiver, m: minutes, c: category, d: redeem, v: q.visitId, t: q.deadline, a: assertion }));
     });
-  useSpeakOnShow(payload ? s.askGuardianHint : s.whatHelp);
+  useSpeakOnShow(payload ? s.askGuardianHint : s.whatDidYouDo);
   if (payload) {
     const url = appUrl(`/witness/${payload}`);
     return (
@@ -816,10 +876,11 @@ function HelpedFor({ s, lang, phase, me, receiver }: Ctx & { me: Me; receiver: H
   }
   return (
     <Screen s={s} title={s.helpedThem} onBack={() => go(`/u/${receiver}`)}>
-      <h2>{s.whatHelp}</h2>
+      <h2>{s.whatDidYouDo}</h2>
       <CategoryPicker phase={phase} lang={lang} value={category} onChange={setCategory} />
       <h2>{s.howLong}</h2>
       <Choice options={[30, 60, 90, 120]} value={minutes} onChange={setMinutes} render={(m) => shortMinutes(m, s)} />
+      <ArrivalLine s={s} lang={lang} arrival={arrival} claimed={minutes} />
       {redeem && <p className="muted">{s.useFamilyHours(formatMinutes(balance, s))}</p>}
       <button className="primary" disabled={busy} onClick={sign}>{s.signAsHelper}</button>
       {error && <ErrorNote error={error} s={s} />}
@@ -840,16 +901,18 @@ function Witness({ s, lang, phase, me, raw }: Ctx & { me: Me; raw: string }) {
   const [seconds, setSeconds] = useState("");
   const { busy, error, run } = useAsync();
   const cat = CATEGORIES.find((c) => c.id === p?.c) ?? CATEGORIES[0];
+  const arrival = useArrival(p?.v, p?.h ?? chain.NO_VISIT, loadFamily().find((f) => f.id === p?.r)?.secret);
   useSpeakOnShow(p && (done ? s.sealed : s.witnessBody(shortId(p.h), familyName(p.r, s), cat[lang], formatMinutes(p.m, s))));
   if (!p) return <Screen s={s}><ErrorNote error="bad link" s={s} /></Screen>;
 
   const confirm = () =>
     run(async () => {
       if ((await chain.getGuardian(p.r)) !== me.id) throw new Error(s.notGuardian);
-      const digest = await chain.sealDigest(p.h, p.r, p.m, p.c, p.d);
-      const guardian = await signAs(digest, me.id);
+      if (chain.nowSeconds() > p.t) throw new Error("Expired");
+      const q = requestOf(p);
+      const guardian = await signAs(await chain.sealDigest(q), me.id);
       const t0 = performance.now();
-      const { hash } = await chain.relay("sealByGuardian", [p.h, p.r, p.m, p.c, p.d, chain.toArgs(p.a), chain.toArgs(guardian.assertion)]);
+      const { hash } = await chain.relay("sealByGuardian", [q, chain.toArgs(p.a), chain.toArgs(guardian.assertion)]);
       setSeconds(((performance.now() - t0) / 1000).toFixed(1));
       setDone(hash);
       setTimeout(stampFeedback, 900);
@@ -871,9 +934,10 @@ function Witness({ s, lang, phase, me, raw }: Ctx & { me: Me; raw: string }) {
       <div className="sheet center">
         <WindowTile phase={phase} tile={cat.tile} />
         <p className="instruction">{s.witnessBody(shortId(p.h), familyName(p.r, s), cat[lang], formatMinutes(p.m, s))}</p>
+        <ArrivalLine s={s} lang={lang} arrival={arrival} claimed={p.m} />
         {p.d && <p className="muted small">{s.witnessPays}</p>}
         <button className="primary" disabled={busy} onClick={confirm}>{busy ? s.sealing : s.signWitness}</button>
-        {error && <ErrorNote error={error === "wrong-person" ? s.notGuardian : error} s={s} />}
+        {error && <ErrorNote error={error === "wrong-person" ? s.notGuardian : friendlyError(error, s)} s={s} />}
       </div>
     </Screen>
   );
@@ -919,7 +983,7 @@ function FamilyNew({ s, phase, me }: Ctx & { me: Me }) {
       const id = await chain.dependentDigest(me.id);
       const { assertion } = await signAs(id, me.id);
       await chain.relay("registerDependent", [me.id, chain.toArgs(assertion)]);
-      addFamily({ id, name: name.trim() || shortId(id) });
+      addFamily({ id, name: name.trim() || shortId(id), secret: randomHex() });
       stampFeedback();
       go(`/card/${id}`);
     });
@@ -939,13 +1003,14 @@ function FamilyNew({ s, phase, me }: Ctx & { me: Me }) {
 
 function FamilyCard({ s, phase, id }: Ctx & { id: Hex }) {
   const name = familyName(id, s);
+  const secret = loadFamily().find((f) => f.id === id)?.secret;
   useSpeakOnShow(`${s.familyCard}。${s.familyCardHint}`);
   return (
     <Screen s={s} title={s.familyCard} onBack={() => go("/family")}>
       <div className="sheet center family-card">
         <h2>{name}</h2>
         <div className="qr-frame">
-          <QR value={appUrl(`/u/${id}`)} label={name} />
+          <QR value={appUrl(secret ? `/u/${id}/${secret}` : `/u/${id}`)} label={name} />
           <span className="qr-badge"><WindowTile phase={phase} tile={TILE.family} /></span>
         </div>
         <p className="muted">{s.familyCardHint}</p>
@@ -987,13 +1052,13 @@ export default function App() {
   let body;
   // Links that work without a local identity: the helper may be on a new phone.
   if (page === "confirm" && arg) body = <Confirm {...ctx} raw={arg} />;
-  else if (page === "checkin" && arg) body = <CheckIn {...ctx} challenge={arg as Hex} host={arg2 as Hex | undefined} />;
+  else if (page === "checkin" && arg) body = <CheckIn {...ctx} challenge={arg as Hex} />;
   else if (page === "door") body = <DoorCheck {...ctx} />;
   else if (page === "demo" && arg) body = <DemoScene {...ctx} which={arg} />;
   else if (!me) body = <Welcome {...ctx} />;
   else if (page === "code") body = <MyCode {...ctx} me={me} />;
   else if (page === "scan") body = <ScanHelp {...ctx} />;
-  else if (page === "u" && arg) body = <Person {...ctx} id={arg as Hex} />;
+  else if (page === "u" && arg) body = <Person {...ctx} id={arg as Hex} secret={arg2 as Hex | undefined} />;
   else if (page === "thank" && arg) body = <Thank {...ctx} me={me} helper={arg as Hex} />;
   else if (page === "gift" && arg) body = <Gift {...ctx} me={me} to={arg as Hex} />;
   else if (page === "donate") body = <Donate {...ctx} me={me} />;
