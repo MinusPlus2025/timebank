@@ -2,32 +2,38 @@
    Colours are sampled from the illustration sheets so tiles blend into the wall. */
 :root {
   /* Calm palette: warm paper, charcoal ink, one accent (lamp light). */
-  --wall: #f5f1ea;
-  --sky: #f5f1ea;
-  --ink: #2b2f33;
-  --ink-soft: #6b6f73;
-  --paper: #fbf9f5;
-  --paper-2: #efe9df;
-  --on-wall: #2b2f33;
+  --wall: #e6f0e8;
+  --sky: #e6f0e8;
+  --ink: #26332b;
+  --ink-soft: #5f6e63;
+  --paper: #f5f9f5;
+  --paper-2: #e0ebe2;
+  --on-wall: #26332b;
+  --brand: #3e8c63;
+  --brand-ink: #1f4a33;
+  --action: #205b3d;
   --glow: #e9a23b;
-  --line: #e2dbcf;
+  --line: #cfdbd1;
   --warn: #f6ecd8;
   --ok: #e6eee4;
   --base: 18px;
   color-scheme: light;
 }
 :root[data-phase="night"] {
-  --wall: #1e232b;
-  --sky: #1e232b;
-  --ink: #ece7dd;
-  --ink-soft: #a9a59d;
-  --paper: #1e232b;
-  --paper-2: #272d37;
-  --on-wall: #ece7dd;
-  --glow: #f2c46d;
-  --line: #343b47;
-  --warn: #3a3324;
-  --ok: #26332b;
+  --wall: #202a25;
+  --sky: #202a25;
+  --ink: #eee9df;
+  --ink-soft: #b8b9ae;
+  --paper: #26322b;
+  --paper-2: #303b33;
+  --on-wall: #eee9df;
+  --brand: #9fcfb0;
+  --brand-ink: #b9ddc4;
+  --action: #397653;
+  --glow: #e9be76;
+  --line: #435148;
+  --warn: #3b3429;
+  --ok: #2d3c32;
   color-scheme: dark;
 }
 :root[data-big="1"] {
@@ -106,7 +112,7 @@ button {
   color: var(--ink);
 }
 :root[data-phase="day"] .brand-mini {
-  color: #1f4a33;
+  color: var(--brand-ink);
 }
 .prefs {
   display: flex;
@@ -155,6 +161,10 @@ button {
   background-size: 300% 300%;
   background-repeat: no-repeat;
   transition: filter 0.6s, opacity 0.6s;
+}
+:root[data-phase="night"] .tile {
+  background-color: #35463b;
+  background-blend-mode: lighten;
 }
 .tile.fresh {
   animation: light-on 1.2s ease-out both;
@@ -443,8 +453,8 @@ p {
   transition: transform 0.12s ease;
 }
 .primary {
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--action);
+  color: #fff;
   border: 0;
 }
 .primary.small {
@@ -454,7 +464,8 @@ p {
 }
 .secondary {
   background: transparent;
-  border: 1.5px solid var(--ink);
+  border: 1.5px solid var(--brand-ink);
+  color: var(--brand-ink);
 }
 .primary:active,
 .secondary:active {
@@ -1032,7 +1043,10 @@ input:focus-visible {
 
 /* ---------- calm overrides (v3) ---------- */
 body {
-  background: var(--sky);
+  background-color: var(--sky);
+  background-image:
+    radial-gradient(ellipse 78% 66% at 46% 8%, color-mix(in srgb, var(--brand) 5%, transparent), transparent 100%);
+  background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
 }
 .topbar {
@@ -1054,7 +1068,9 @@ body {
   border-color: var(--ink-soft);
 }
 .home {
-  background: var(--sky);
+  background-color: var(--sky);
+  background-image:
+    radial-gradient(ellipse 78% 66% at 46% 8%, color-mix(in srgb, var(--brand) 5%, transparent), transparent 100%);
 }
 .sky {
   background: transparent !important;
@@ -1219,6 +1235,7 @@ h2 {
 .tile-wrap {
   position: relative;
   overflow: hidden;
+  border-radius: 16px;
 }
 .tile-wrap > .tile,
 .tile-layer {
@@ -1396,10 +1413,10 @@ h2 {
 
 /* ---------- comfort pass ---------- */
 :root[data-phase="night"] {
-  --wall: #1e232b;
-  --paper: #222831;
-  --paper-2: #2a313b;
-  --line: #3a414d;
+  --wall: #202a25;
+  --paper: #26322b;
+  --paper-2: #303b33;
+  --line: #435148;
 }
 .screen {
   padding-bottom: calc(120px + env(safe-area-inset-bottom));
@@ -1419,7 +1436,7 @@ h2 {
   box-shadow: 0 0 0 1px var(--line);
 }
 .category.on .tile-wrap {
-  box-shadow: 0 0 0 3px var(--glow), 0 10px 24px -12px var(--glow);
+  box-shadow: 0 0 0 3px var(--brand), 0 10px 24px -12px var(--brand);
 }
 .category.on {
   border: 0;
@@ -1441,7 +1458,7 @@ h2 {
   position: absolute;
   inset: 0;
   border-radius: 999px;
-  background: var(--ink);
+  background: var(--action);
   z-index: 0;
 }
 .choice-label {
@@ -1469,14 +1486,14 @@ h2 {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #4caf7a;
-  box-shadow: 0 0 0 4px rgba(76, 175, 122, 0.2);
+  background: var(--brand);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--brand) 20%, transparent);
 }
 .receipt-time {
   margin-left: auto;
   font-size: 0.8rem;
   font-weight: 600;
-  color: #3f9a6a;
+  color: var(--brand-ink);
 }
 .receipt p {
   margin: 0 0 6px;
@@ -1505,7 +1522,7 @@ h2 {
 .category.on .tile-wrap {
   box-shadow: none !important;
   background: transparent;
-  border-radius: 0;
+  border-radius: 16px;
 }
 .category-glow {
   position: absolute;
@@ -1556,7 +1573,10 @@ h2 {
 /* Page background matches the illustration wall so window tiles have no visible edges. */
 html,
 body {
-  background: var(--wall) !important;
+  background-color: var(--wall) !important;
+  background-image:
+    radial-gradient(ellipse 78% 66% at 46% 8%, color-mix(in srgb, var(--brand) 5%, transparent), transparent 100%) !important;
+  background-attachment: fixed;
 }
 .choices {
   grid-template-columns: repeat(4, 1fr);
@@ -1924,14 +1944,14 @@ body {
 
 /* ---------- heartbeat code (face-to-face seals) ---------- */
 :root {
-  --live: #e0565b;
-  --live-soft: rgba(224, 86, 91, 0.14);
-  --live-ink: #b8423f;
+  --live: #3e8c63;
+  --live-soft: rgba(62, 140, 99, 0.16);
+  --live-ink: #1f6844;
 }
 :root[data-phase="night"] {
-  --live: #ff7a7f;
-  --live-soft: rgba(255, 122, 127, 0.16);
-  --live-ink: #ff9a9e;
+  --live: #8fcba7;
+  --live-soft: rgba(143, 203, 167, 0.18);
+  --live-ink: #a6d1b5;
 }
 .heartbeat {
   display: flex;
@@ -2067,7 +2087,7 @@ body {
 }
 .check-dot.ok {
   color: #fff;
-  background: #4caf7a;
+  background: var(--action);
 }
 .check-dot.spin {
   border: 2.5px solid var(--live-soft);
@@ -2081,7 +2101,7 @@ body {
 }
 .receipt .checks li:last-child {
   font-weight: 600;
-  color: var(--live-ink);
+  color: var(--brand-ink);
 }
 .receipt-live {
   margin: 0 0 4px !important;
@@ -2089,8 +2109,8 @@ body {
   color: var(--live-ink);
 }
 :root[data-phase="night"] .badge-live {
-  color: #f08a85;
-  background: rgba(224, 86, 91, 0.16);
+  color: var(--live-ink);
+  background: var(--live-soft);
 }
 .live-scan {
   position: relative;
@@ -2251,4 +2271,24 @@ h2,
 .live-scan video[data-source="screen"] {
   object-fit: contain;
   background: #000;
+}
+
+/* Keep brand and selection colors consistent after the earlier comfort overrides. */
+:root[data-phase="day"] .brand-mini {
+  color: var(--brand-ink);
+}
+.category.on .category-art .tile-wrap {
+  box-shadow: 0 0 0 3px var(--brand) !important;
+}
+.choice.on {
+  background: transparent !important;
+  color: #fff;
+  border-color: var(--action);
+}
+.choice.on .choice-pill {
+  background: var(--action);
+}
+.step-num {
+  background: var(--action);
+  color: #fff;
 }

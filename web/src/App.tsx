@@ -95,7 +95,7 @@ function Welcome({ s, phase, setMe, elder, toggleElder }: Ctx) {
   if (splash)
     return (
       <main className="splash" onClick={() => setSplash(false)}>
-        <Wordmark size={64} animated />
+        <Wordmark size={64} animated ink="var(--brand-ink)" />
         <p>{s.tagline}</p>
       </main>
     );
@@ -130,7 +130,7 @@ function Welcome({ s, phase, setMe, elder, toggleElder }: Ctx) {
         <Street phase={phase} />
       </div>
       <div className="welcome-copy">
-        <Wordmark size={48} animated />
+        <Wordmark size={48} animated ink="var(--brand-ink)" />
         <p className="tagline">{s.tagline}</p>
         {!passkeysSupported() ? (
           <p className="note error">{s.noPasskey}</p>
@@ -475,7 +475,7 @@ function MyCode({ s, phase, me }: Ctx & { me: Me }) {
   );
 }
 
-/** Standalone scenes for recording the demo video: #/demo/street | garland | plane | door */
+/** Standalone scenes for visual previews: #/demo/street | garland | plane | door */
 function DemoScene({ phase, which }: Ctx & { which: string }) {
   const tiles = [6, 0, 7, 2, 4, 8, 3, 7];
   return (
