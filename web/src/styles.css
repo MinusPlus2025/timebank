@@ -312,6 +312,9 @@ button {
   body:has(.home) {
     background: var(--sky);
   }
+  .how {
+    align-self: start;
+  }
   .sky {
     position: sticky;
     top: 96px;
@@ -1951,6 +1954,10 @@ body {
   font-weight: 600;
   color: #b8423f;
   background: rgba(224, 86, 91, 0.12);
+}
+:root[data-phase="night"] .badge-live {
+  color: #f08a85;
+  background: rgba(224, 86, 91, 0.16);
 }
 .live-scan {
   position: relative;
