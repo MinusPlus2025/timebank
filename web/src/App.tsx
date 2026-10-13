@@ -12,7 +12,7 @@ import { usePhase, THEME_PREFS, type Phase, type ThemePref } from "./theme";
 import { Wordmark } from "./Brand";
 import { CountUp, Door, Facade, Garland, PaperPlane, TILE, WindowTile, spring } from "./Windows";
 import { Onboarding, Street } from "./Onboarding";
-import { LiveScan } from "./LiveScan";
+import { LiveScan, canScanScreen, screenLive, startScreenScan } from "./LiveScan";
 import { detectInApp, ourRoute, type InApp } from "./inapp";
 import { configureVoice, speak, speakFromTap, useSpeakOnShow, voiceSupported } from "./voice";
 
@@ -508,6 +508,7 @@ function ScanHelp({ s, phase }: Ctx) {
       {scanning ? (
         <>
           <p className="instruction">{s.scanPoint}</p>
+          {screenLive() && <p className="muted small">{s.scanScreenHint}</p>}
           <LiveScan
             label={s.scanPoint}
             onCode={(text) => {
@@ -527,6 +528,14 @@ function ScanHelp({ s, phase }: Ctx) {
           <div className="person-window"><WindowTile phase={phase} tile={4} lightAt={0.3} /></div>
           <p className="instruction">{s.scanBody}</p>
           <button className="primary" onClick={() => setScanning(true)}>{s.scanNow}</button>
+          {canScanScreen() && (
+            <button
+              className="secondary"
+              onClick={() => startScreenScan().then(() => setScanning(true), () => undefined)}
+            >
+              {s.scanScreen}
+            </button>
+          )}
         </>
       )}
       <p className="muted">{s.scanCopy}</p>

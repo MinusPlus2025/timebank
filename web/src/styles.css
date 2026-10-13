@@ -2246,3 +2246,9 @@ h2,
   font-weight: 500;
   opacity: 0.7;
 }
+
+/* A shared screen is shown whole, so you can see which window is being read. */
+.live-scan video[data-source="screen"] {
+  object-fit: contain;
+  background: #000;
+}

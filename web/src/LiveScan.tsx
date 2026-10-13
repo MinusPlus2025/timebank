@@ -1,8 +1,25 @@
 import { useEffect, useRef, useState } from "react";
 import jsQR from "jsqr";
 
-/** The in-app camera: reads QR codes frame by frame and hands each decoded text to onCode
- * until it returns true. Used to catch a fresh heartbeat from the screen right in front of you. */
+// On a computer the "other phone" is another browser window, so the scanner can read the
+// screen instead of the camera. One shared capture serves every scan until the person stops it,
+// so a rescan of an aged-out heartbeat code doesn't ask for permission again.
+let screen: MediaStream | null = null;
+export const screenLive = () => !!screen && screen.getVideoTracks().some((t) => t.readyState === "live");
+
+export const canScanScreen = () =>
+  typeof navigator !== "undefined" &&
+  !!navigator.mediaDevices?.getDisplayMedia &&
+  !/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
+
+/** Asks to share a screen or window; must run inside a click. */
+export async function startScreenScan() {
+  if (screenLive()) return;
+  screen = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+}
+
+/** The in-app scanner: reads QR codes frame by frame and hands each decoded text to onCode
+ * until it returns true. Uses the shared screen capture when one is live, else the camera. */
 export function LiveScan({ onCode, label }: { onCode: (text: string) => boolean; label: string }) {
   const video = useRef<HTMLVideoElement>(null);
   const [failed, setFailed] = useState("");
@@ -16,12 +33,14 @@ export function LiveScan({ onCode, label }: { onCode: (text: string) => boolean;
     const canvas = document.createElement("canvas");
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
 
+    const fromScreen = screenLive();
     const tick = () => {
       if (stopped) return;
       const v = video.current;
       if (v && ctx && v.readyState >= v.HAVE_ENOUGH_DATA && v.videoWidth) {
         // Downscale: QR codes decode fine at ~640px and phones keep up at full frame rate.
-        const scale = Math.min(1, 640 / v.videoWidth);
+        // A shared screen holds the code in a corner of a large frame, so it keeps more pixels.
+        const scale = Math.min(1, (fromScreen ? 1600 : 640) / v.videoWidth);
         canvas.width = Math.round(v.videoWidth * scale);
         canvas.height = Math.round(v.videoHeight * scale);
         ctx.drawImage(v, 0, 0, canvas.width, canvas.height);
@@ -32,13 +51,16 @@ export function LiveScan({ onCode, label }: { onCode: (text: string) => boolean;
       frame = requestAnimationFrame(tick);
     };
 
-    navigator.mediaDevices
-      ?.getUserMedia({ video: { facingMode: "environment" }, audio: false })
-      .then((s) => {
-        if (stopped) return s.getTracks().forEach((t) => t.stop());
-        stream = s;
+    const source = fromScreen
+      ? Promise.resolve(screen as MediaStream)
+      : navigator.mediaDevices?.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+    source
+      ?.then((s) => {
+        if (stopped) return fromScreen ? undefined : s.getTracks().forEach((t) => t.stop());
+        if (!fromScreen) stream = s;
         if (video.current) {
           video.current.srcObject = s;
+          if (fromScreen) video.current.dataset.source = "screen";
           video.current.play().catch(() => undefined);
         }
         frame = requestAnimationFrame(tick);
