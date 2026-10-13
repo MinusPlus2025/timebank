@@ -45,7 +45,7 @@ document.getElementById('r1').innerHTML=`
 const zhMark=(size,ink=GD,glow=A)=>`<div style="font-family:NotoSerif;font-weight:900;font-size:${size}px;color:${ink};letter-spacing:.06em;display:flex;align-items:center">时<span style="position:relative;display:inline-block">门<span style="position:absolute;left:50%;top:58%;transform:translate(-50%,-50%);font-size:.5em;font-weight:900;color:${glow};text-shadow:0 0 .3em ${glow}aa">日</span></span>银行</div>`;
 const enMark=(size,ink=GD,glow=A)=>`<div style="font-family:Nunito;font-weight:900;font-size:${size}px;color:${ink};letter-spacing:-.02em;position:relative;line-height:1">t<span style="display:inline-block;position:relative;width:.2em;height:.52em;margin:0 .05em 0 .04em;background:${ink};border-radius:.04em;vertical-align:baseline"><span style="position:absolute;left:50%;top:-.34em;transform:translateX(-50%);width:.22em;height:.22em;border-radius:.05em;background:${glow};box-shadow:0 0 .14em ${glow}"></span></span>mebank</div>`;
 document.getElementById('r2').innerHTML=`
-<div class="card"><h3>2a · 中文字标「间」里有光</h3><p>“间”字本来就是“门”里有“日”：门缝里透进来的光。我们把“日”点亮成暖黄色。汉字自带的故事，讲给海外评委听也很有记忆点。</p>
+<div class="card"><h3>2a · 中文字标「间」里有光</h3><p>“间”字本来就是“门”里有“日”：门缝里透进来的光。我们把“日”点亮成暖黄色。汉字自带的故事，讲给海外用户听也很有记忆点。</p>
 <div class="stage">${zhMark(64)}</div><div class="stage dark" style="height:110px;margin-top:10px">${zhMark(44,'#F3EEDF')}</div></div>
 <div class="card"><h3>2b · 英文字标 timebank</h3><p>全小写的圆体字，亲切不严肃；“i”上的点换成一扇亮着的小窗。国际通用，一眼就能读出产品名。</p>
 <div class="stage">${enMark(72)}</div><div class="stage dark" style="height:110px;margin-top:10px">${enMark(50,'#F3EEDF')}</div></div>`;
