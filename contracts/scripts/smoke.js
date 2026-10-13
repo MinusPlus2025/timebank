@@ -60,7 +60,10 @@ async function main() {
     await bank.sealInPerson.staticCall(q3, live.address, old, oldBeat, alice.sign(d3), bob.sign(d3));
     throw new Error("stale heartbeat code was accepted");
   } catch (e) {
-    if (!/CodeExpired/.test(String(e.message) + JSON.stringify(e.revert ?? ""))) throw e;
+    // Hardhat's provider leaves the raw revert data on e.data instead of decoding it.
+    const raw = typeof e.data === "string" ? e.data : e.data?.data;
+    const decoded = raw ? bank.interface.parseError(raw)?.name : undefined;
+    if (!/CodeExpired/.test(String(e.message) + JSON.stringify(e.revert ?? "") + (decoded ?? ""))) throw e;
     console.log(`stale code (${window}+ blocks old) rejected: CodeExpired`);
   }
 }
