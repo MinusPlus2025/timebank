@@ -40,15 +40,15 @@ One-device alternative: `cd contracts && TIMEBANK_ADDRESS=0xb2dD…C176 npx hard
 1. **Passkey sign-up.** A passkey is used to control your account. There is no wallet, no seed phrase and no password.
 2. **Two-person seal with a freshness check.** The person who was helped starts the record and signs. Their screen then shows a **heartbeat code** tied to a recent Monad block. The helper scans it and signs too. The contract verifies both WebAuthn signatures on-chain, checks that the scanned code is at most 30 blocks old, credits the hours, and mints a generative seal. Old screenshots expire; live relay and collusion remain possible.
 3. **Give time to family.** A daughter in Shanghai gives her hours to her mother in another city, and a local volunteer takes her mother to the clinic. *"I can't be with you, but someone will be, for me."*
-4. **Anonymous donation** to a community pool, which the community grants to people in need.
-5. **Door check.** Before opening the door, the host shows a QR code. The visitor signs with their passkey, and within about a second the host's screen shows "verified, volunteer of Sunrise Community".
+4. **Community pool donation.** Members can give hours to a community pool, which the community grants to people in need. The member ID is present in the transaction data, so this is not anonymous.
+5. **Door check.** Before opening the door, the host shows a QR code. The visitor signs with their passkey, and within about a second the host's screen shows a matching account and its community volunteer registration, if present. This confirms account control, not the visitor's real-world identity; check the person at the door separately.
 6. **Your building.** Your home screen is a building. Each act of help lights a window showing that scene, and you can tap a window to open it. Illustrations show neighbours of many ages and cultures. They were generated with Figma AI and art-directed by the author.
 
 ### Ethics, by design
 - **Family members are never measured against each other.** Hours are earned with neighbours and strangers. Family only *receive* gifts.
 - **Thanks, not debt.** The person who was helped starts the record. There are no "who owes whom" views and no leaderboards.
 - **Time can be given, never sold.** There is no token, no market and no investment.
-- **Privacy.** On-chain data is only pseudonymous ids, minutes and a category code. Names stay on the phone. No health data and no free text go on-chain.
+- **Privacy.** On-chain data is only pseudonymous ids, minutes and a category code. Names stay on the phone. No health data and no free text go on-chain. Member IDs and activity may still be linkable.
 
 ## Why Monad
 **Measured on Monad testnet**, earlier contract `0xA15f3aBeABE823726070dF8Cea0e4E52d8bd234d` (v3): a two-passkey seal checks 2 WebAuthn signatures on-chain, uses **307,241 gas**, and was confirmed in **1.7 s** end to end from our test machine (619 ms on the first version, `0x5CffF394…49e`; latency includes our network path). A door check signed by the real person returns true and one signed by an impostor returns false. On the current contract `0xb2dD5D6A8681aA7CC298fb29FF5b3fd2d4E5C176` (v4, heartbeat seals), an ordinary seal used **330,050 gas** and confirmed in **1.7 s**, a heartbeat-enabled `sealInPerson` (declared limit **450,000 gas**, which Monad bills) confirmed in **1.9 s** with the heartbeat code **6 blocks** old, and a code more than 30 blocks old was rejected with `CodeExpired`. See `contracts/scripts/smoke.js`.
@@ -105,7 +105,7 @@ Then deploy `web/` to Vercel with the environment variables in `web/.env.example
 
 ## Honest limits
 - No real users, interviews or partner organisations yet; all on-chain data is test data.
-- We are not the first "blockchain + time bank". Government and consortium-chain pilots exist. Our difference is a public chain, user-held records, cross-community recognition, and two-person passkey seals.
+- We are not the first "blockchain + time bank". Government and consortium-chain pilots exist. Our difference is a public chain, user-held records and two-person passkey seals. Cross-community recognition would need participating organisations and integrations; it is not available yet.
 - A chain fixes record-keeping and trust. It does not fix low participation, which needs community work.
 - Older people may need family or community staff to help them set up a passkey.
 - **What the heartbeat code does not stop.** It limits replay of an old screenshot by rejecting stale codes. It does not stop a recently captured code from being relayed within the valid window, a live video call, or two people who agree to cheat. Two signatures reduce one-sided fraud; public records can support audits, but cannot make collusion impossible.
