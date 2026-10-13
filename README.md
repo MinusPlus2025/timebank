@@ -105,7 +105,7 @@ Then deploy `web/` to Vercel with the environment variables in `web/.env.example
 
 ## Honest limits
 - No real users, interviews or partner organisations yet; all on-chain data is test data.
-- We are not the first "blockchain + time bank". Government and consortium-chain pilots exist. Our difference is a public chain, user-held records and two-person passkey seals. Cross-community recognition would need participating organisations and integrations; it is not available yet.
+- We are not the first "blockchain + time bank". Government and consortium-chain pilots exist. Our difference is a public chain, user-held records, cross-community recognition, and two-person passkey seals. Cross-community recognition is a planned future capability that will require participating organisations and integrations; it is not live in the current version yet.
 - A chain fixes record-keeping and trust. It does not fix low participation, which needs community work.
 - Older people may need family or community staff to help them set up a passkey.
 - **What the heartbeat code does not stop.** It limits replay of an old screenshot by rejecting stale codes. It does not stop a recently captured code from being relayed within the valid window, a live video call, or two people who agree to cheat. Two signatures reduce one-sided fraud; public records can support audits, but cannot make collusion impossible.
