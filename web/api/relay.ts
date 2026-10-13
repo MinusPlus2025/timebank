@@ -42,6 +42,21 @@ function send(res: ServerResponse, status: number, payload: unknown) {
   res.end(JSON.stringify(payload));
 }
 
+// Everyone shares one relayer key, so two requests at the same moment can pick the same nonce
+// and the node rejects the later one. Retry those with a fresh nonce after a short random wait.
+const NONCE_CLASH = /nonce|invalid parameters|replacement|already known|underpriced/i;
+async function sendWithFreshNonce(nextNonce: () => Promise<number>, send: (nonce: number) => Promise<Hex>): Promise<Hex> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await send(await nextNonce());
+    } catch (err) {
+      const e = err as { shortMessage?: string; message?: string };
+      if (attempt >= 5 || !NONCE_CLASH.test(`${e.shortMessage} ${e.message}`)) throw err;
+      await new Promise((r) => setTimeout(r, 200 + Math.random() * 600));
+    }
+  }
+}
+
 export default async function handler(req: IncomingMessage, res: ServerResponse) {
   if (req.method !== "POST") return send(res, 405, { error: "POST only" });
   try {
@@ -56,7 +71,9 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
       args: args as never,
       account,
     });
-    const hash = await walletClient.writeContract(request);
+    const hash = await sendWithFreshNonce(() => publicClient.getTransactionCount({ address: account.address, blockTag: "pending" }), (nonce) =>
+      walletClient.writeContract({ ...request, nonce })
+    );
     const receipt = await publicClient.waitForTransactionReceipt({ hash });
     send(res, 200, { hash, status: receipt.status, blockNumber: receipt.blockNumber.toString() });
   } catch (err) {
