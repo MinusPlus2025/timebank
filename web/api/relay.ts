@@ -7,7 +7,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { timeBankAbi } from "../src/abi.js";
 import { DEPLOYED } from "../src/deployment.js";
 
-const ALLOWED = new Set(["register", "seal", "gift", "donate", "checkIn", "registerDependent", "sealByGuardian", "arrive"]);
+const ALLOWED = new Set(["register", "seal", "sealInPerson", "gift", "donate", "checkIn", "registerDependent", "sealByGuardian", "arrive"]);
 
 function clients() {
   const key = process.env.RELAYER_PRIVATE_KEY as Hex | undefined;
@@ -60,7 +60,10 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     const receipt = await publicClient.waitForTransactionReceipt({ hash });
     send(res, 200, { hash, status: receipt.status, blockNumber: receipt.blockNumber.toString() });
   } catch (err) {
-    const e = err as { shortMessage?: string; message?: string };
-    send(res, 400, { error: e.shortMessage || e.message || "Relay failed" });
+    const e = err as { shortMessage?: string; message?: string; walk?: (fn: (e: unknown) => boolean) => unknown };
+    // Name the contract's custom error (e.g. CodeExpired) so the app can react to it.
+    const revert = e.walk?.((x) => !!(x as { data?: { errorName?: string } })?.data?.errorName) as { data?: { errorName?: string } } | undefined;
+    const name = revert?.data?.errorName;
+    send(res, 400, { error: name ? `${e.shortMessage || "Reverted"} (${name})` : e.shortMessage || e.message || "Relay failed" });
   }
 }

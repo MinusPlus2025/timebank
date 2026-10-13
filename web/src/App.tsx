@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import { hexToString, toHex, type Hex } from "viem";
+import { generatePrivateKey, privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
 import { CATEGORIES, detectLang, formatHours, formatMinutes, strings, type Lang, type Strings } from "./i18n";
-import { idOf, loadMe, saveMe, shortId, encodeSealPayload, decodeSealPayload, loadFamily, addFamily, arrivalTag, visitIdOf, locationCommitment, rememberVisit, recalledVisit, type Me, type SealPayload } from "./identity";
-import { createPasskey, passkeysSupported, signWithPasskey } from "./passkey";
+import { idOf, loadMe, saveMe, shortId, encodeSealPayload, decodeSealPayload, encodeBeat, decodeBeat, type Beat, loadFamily, addFamily, arrivalTag, visitIdOf, locationCommitment, rememberVisit, recalledVisit, type Me, type SealPayload } from "./identity";
+import { createPasskey, passkeysSupported, signWithPasskey, type Assertion } from "./passkey";
 import * as chain from "./chain";
 import { stampFeedback } from "./feedback";
 import { CopyLink, ErrorNote, QR, Screen, errorMessage } from "./ui";
@@ -11,6 +12,7 @@ import { usePhase, THEME_PREFS, type Phase, type ThemePref } from "./theme";
 import { Wordmark } from "./Brand";
 import { CountUp, Door, Facade, Garland, PaperPlane, TILE, WindowTile, spring } from "./Windows";
 import { Onboarding, Street } from "./Onboarding";
+import { LiveScan } from "./LiveScan";
 import { configureVoice, speak, speakFromTap, useSpeakOnShow, voiceSupported } from "./voice";
 
 // ---------- routing & app state ----------
@@ -162,8 +164,10 @@ const familyName = (id: Hex, s: Strings) => loadFamily().find((f) => f.id === id
 const clock = (seconds: number, lang: Lang) =>
   new Date(seconds * 1000).toLocaleTimeString(lang === "zh" ? "zh-CN" : "en-GB", { hour: "2-digit", minute: "2-digit" });
 const randomHex = () => toHex(crypto.getRandomValues(new Uint8Array(32)));
+// Submit only codes at most this many blocks old, leaving the rest of LIVE_WINDOW for the relay to land.
+const LIVE_MARGIN = chain.LIVE_WINDOW / 2;
 const requestOf = (p: SealPayload): chain.SealRequest => ({ helper: p.h, receiver: p.r, minutes_: p.m, category: p.c, redeem: p.d, visitId: p.v, deadline: p.t });
-const friendlyError = (error: string, s: Strings) => (/Expired/.test(error) ? s.expired : error);
+const friendlyError = (error: string, s: Strings) => (/CodeExpired/.test(error) ? s.codeStale : /Expired/.test(error) ? s.expired : error);
 
 /** The helper's arrival behind a seal, if any: when it started and how long they have been there. */
 type Arrival = { start: number; minutes: number; atHome: boolean | null };
@@ -179,7 +183,7 @@ function useArrival(visitId: Hex | null | undefined, helper: Hex, secret?: Hex) 
       .then((v) =>
         setArrival(
           v.visitor === helper && !v.closed && v.start
-            ? { start: v.start, minutes: Math.floor((chain.nowSeconds() - v.start) / 60), atHome: secret ? arrivalTag(secret, v.nonce) === v.tag : null }
+            ? { start: v.start, minutes: Math.max(0, Math.floor((chain.nowSeconds() - v.start) / 60)), atHome: secret ? arrivalTag(secret, v.nonce) === v.tag : null }
             : null
         )
       )
@@ -561,6 +565,8 @@ function Thank({ s, lang, phase, me, helper }: Ctx & { me: Me; helper: Hex }) {
   const [redeem, setRedeem] = useState(false);
   const [balance, setBalance] = useState(0);
   const [payload, setPayload] = useState("");
+  const [live, setLive] = useState<{ digest: Hex; key: PrivateKeyAccount; nonce: number } | null>(null);
+  const [landed, setLanded] = useState(false);
   const { busy, error, run } = useAsync();
   useEffect(() => {
     chain.getMember(me.id).then((m) => setBalance(m.balance)).catch(() => undefined);
@@ -571,21 +577,61 @@ function Thank({ s, lang, phase, me, helper }: Ctx & { me: Me; helper: Hex }) {
       if (helper === me.id) throw new Error(lang === "zh" ? "不能感谢自己" : "You can't thank yourself");
       // Short-lived on purpose: the helper should scan it in person, not receive it hours later.
       const q: chain.SealRequest = { helper, receiver: me.id, minutes_: minutes, category, redeem, visitId: chain.NO_VISIT, deadline: chain.nowSeconds() + 300 };
-      const { assertion } = await signAs(await chain.sealDigest(q), me.id);
-      const p: SealPayload = { h: helper, r: me.id, m: minutes, c: category, d: redeem, v: q.visitId, t: q.deadline, a: assertion };
+      // A throwaway key, kept only in this page's memory, that this screen uses to draw a new
+      // heartbeat code every second. Face ID approves exactly this key, so no other screen can.
+      const key = privateKeyToAccount(generatePrivateKey());
+      const { nonce } = await chain.getMember(me.id);
+      const digest = await chain.inPersonDigest(q, key.address);
+      const { assertion } = await signAs(digest, me.id);
+      const p: SealPayload = { h: helper, r: me.id, m: minutes, c: category, d: redeem, v: q.visitId, t: q.deadline, a: assertion, k: key.address };
+      setLive({ digest, key, nonce });
       setPayload(encodeSealPayload(p));
     });
 
-  useSpeakOnShow(payload ? s.showToHelper : `${s.thankTitle}。${s.whatHelp}`);
-  if (payload) {
-    const url = appUrl(`/confirm/${payload}`);
+  // The receiver's own screen learns the seal landed when their nonce moves on.
+  useEffect(() => {
+    if (!live || landed) return;
+    const t = window.setInterval(() => {
+      chain
+        .getMember(me.id)
+        .then((m) => {
+          if (m.nonce > live.nonce) {
+            setLanded(true);
+            setTimeout(stampFeedback, 300);
+          }
+        })
+        .catch(() => undefined);
+    }, 1500);
+    return () => clearInterval(t);
+  }, [live, landed, me.id]);
+
+  useSpeakOnShow(landed ? `${s.sealed}。${s.thankLanded}` : payload ? s.showToHelper : `${s.thankTitle}。${s.whatHelp}`);
+  if (landed) {
     return (
-      <Screen s={s} title={s.thankTitle} onBack={() => setPayload("")}>
+      <Screen s={s}>
+        <div className="center celebrate">
+          <Garland phase={phase} left={tileFor(category)} right={TILE.you} />
+          <h1>{s.sealed}</h1>
+          <p className="badge-live">{s.faceToFace}</p>
+          <p className="quote">{s.thankLanded}</p>
+          <button className="secondary" onClick={() => go("/")}>{s.home}</button>
+        </div>
+      </Screen>
+    );
+  }
+  if (payload && live) {
+    return (
+      <Screen s={s} title={s.thankTitle} onBack={() => (setPayload(""), setLive(null))}>
         <div className="sheet center">
-          <QR value={url} label={s.showToHelper} />
+          <div className="hb-summary">
+            <span>
+              <strong>{(CATEGORIES.find((c) => c.id === category) ?? CATEGORIES[0])[lang]} · {formatMinutes(minutes, s)}</strong>
+              <small>{s.someone} {shortId(helper)}</small>
+            </span>
+          </div>
+          <HeartbeatCode s={s} payload={payload} digest={live.digest} liveKey={live.key} />
           <p className="instruction">{s.showToHelper}</p>
-          <p className="muted small">{s.expiresHint}</p>
-          <CopyLink url={url} s={s} />
+          <p className="hb-hint"><span aria-hidden>⏱</span> {s.heartbeatHint}</p>
         </div>
       </Screen>
     );
@@ -610,7 +656,63 @@ function Thank({ s, lang, phase, me, helper }: Ctx & { me: Me; helper: Hex }) {
   );
 }
 
-function Confirm({ s, lang, phase, me, setMe, raw }: Ctx & { raw: string }) {
+/** The receiver's live code: redrawn every second from the newest Monad block and signed by the
+ * screen's throwaway key. A photo of it stops working within LIVE_WINDOW blocks (a few seconds). */
+function HeartbeatCode({ s, payload, digest, liveKey }: { s: Strings; payload: string; digest: Hex; liveKey: PrivateKeyAccount }) {
+  const [beat, setBeat] = useState<{ block: bigint; code: string } | null>(null);
+  useEffect(() => {
+    let stopped = false;
+    let timer = 0;
+    const draw = async () => {
+      try {
+        const block = await chain.latestBlock();
+        const sig = await liveKey.signMessage({ message: { raw: chain.liveCodeHash(digest, block) } });
+        if (!stopped) setBeat({ block, code: encodeBeat({ block, sig }) });
+      } catch {
+        /* keep the last code; the next beat retries */
+      }
+      if (!stopped) timer = window.setTimeout(draw, 1000);
+    };
+    draw();
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
+  }, [digest, liveKey]);
+  return (
+    <div className="heartbeat">
+      <div className="hb-frame">
+        {/* The ring drains between beats: the code on screen is only ever a moment old. */}
+        <svg className="hb-ring" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
+          <rect className="hb-ring-track" x="1.5" y="1.5" width="97" height="97" rx="9" pathLength={1} />
+          {beat && (
+            <motion.rect
+              key={String(beat.block)}
+              className="hb-ring-live"
+              x="1.5"
+              y="1.5"
+              width="97"
+              height="97"
+              rx="9"
+              pathLength={1}
+              initial={{ pathLength: 1 }}
+              animate={{ pathLength: 0 }}
+              transition={{ duration: 1.1, ease: "linear" }}
+            />
+          )}
+        </svg>
+        {beat ? <QR value={appUrl(`/confirm/${payload}/${beat.code}`)} label={s.showToHelper} /> : <div className="qr hb-connecting">{s.connectingMonad}</div>}
+      </div>
+      <p className="heartbeat-line">
+        <span className="hb-live">LIVE</span>
+        <motion.span key={String(beat?.block)} className="heartbeat-dot" initial={{ scale: 2, opacity: 0.2 }} animate={{ scale: 1, opacity: 1 }} aria-hidden />
+        {beat ? s.heartbeatBlock(String(beat.block)) : "…"}
+      </p>
+    </div>
+  );
+}
+
+function Confirm({ s, lang, phase, me, setMe, raw, beatRaw }: Ctx & { raw: string; beatRaw?: string }) {
   const p = useMemo(() => {
     try {
       return decodeSealPayload(raw);
@@ -620,15 +722,56 @@ function Confirm({ s, lang, phase, me, setMe, raw }: Ctx & { raw: string }) {
   }, [raw]);
   const [done, setDone] = useState<Hex | null>(null);
   const [seconds, setSeconds] = useState("");
+  // Face-to-face seals: the helper's signature, kept while they point the camera at a fresh code.
+  const [signed, setSigned] = useState<{ assertion: Assertion; q: chain.SealRequest } | null>(null);
+  const [rescan, setRescan] = useState(false);
+  const [scanRound, setScanRound] = useState(0);
+  const [codeAge, setCodeAge] = useState<number | null>(null);
   const { busy, error, run } = useAsync();
   useSpeakOnShow(p && (done ? `${s.sealed}。${s.sealedBody}` : `${s.confirmTitle}。${s.confirmBody(formatMinutes(p.m, s), (CATEGORIES.find((c) => c.id === p.c) ?? CATEGORIES[0])[lang])}`));
   if (!p) return <Screen s={s}><ErrorNote error="bad link" s={s} /></Screen>;
   const cat = CATEGORIES.find((c) => c.id === p.c) ?? CATEGORIES[0];
 
+  // Submit with a heartbeat if it is fresh enough to land inside LIVE_WINDOW; otherwise ask for one more scan.
+  const submitLive = (h: { assertion: Assertion; q: chain.SealRequest }, beat: Beat | null) =>
+    run(async () => {
+      const now = await chain.latestBlock();
+      if (!beat || beat.block > now || now - beat.block > BigInt(LIVE_MARGIN)) {
+        setRescan(true);
+        setScanRound((n) => n + 1); // restart the camera for a newer code
+        return;
+      }
+      setRescan(false);
+      const t0 = performance.now();
+      try {
+        const { hash, blockNumber } = await chain.relay("sealInPerson", [h.q, p.k, beat.block, beat.sig, chain.toArgs(h.assertion), chain.toArgs(p.a)]);
+        setSeconds(((performance.now() - t0) / 1000).toFixed(1));
+        if (blockNumber) setCodeAge(Number(BigInt(blockNumber) - beat.block));
+        setDone(hash);
+        setTimeout(stampFeedback, 900);
+      } catch (e) {
+        if (/CodeExpired/.test(errorMessage(e))) {
+          setRescan(true);
+          setScanRound((n) => n + 1);
+        }
+        else setSigned(null); // anything else: let them read the error and start over
+        throw e;
+      }
+    });
+
   const seal = () =>
     run(async () => {
       if (chain.nowSeconds() > p.t) throw new Error("Expired");
       const q = requestOf(p);
+      if (p.k) {
+        const helper = await signAs(await chain.inPersonDigest(q, p.k), p.h);
+        if (!me) setMe({ id: helper.id, x: helper.x, y: helper.y, name: "" });
+        const h = { assertion: helper.assertion, q };
+        setSigned(h);
+        // Face ID takes a few seconds, so the code from the link may already be too old.
+        void submitLive(h, beatRaw ? decodeBeat(beatRaw) : null);
+        return;
+      }
       const helper = await signAs(await chain.sealDigest(q), p.h);
       if (!me) setMe({ id: helper.id, x: helper.x, y: helper.y, name: "" });
       const t0 = performance.now();
@@ -644,7 +787,7 @@ function Confirm({ s, lang, phase, me, setMe, raw }: Ctx & { raw: string }) {
         <div className="center celebrate">
           <Garland phase={phase} left={TILE.you} right={cat.tile} />
           <h1>{s.sealed}</h1>
-          <Receipt s={s} hash={done} seconds={seconds} />
+          <Receipt s={s} hash={done} seconds={seconds} codeAge={p.k ? codeAge : null} />
           <button className="secondary" onClick={() => go("/")}>{s.home}</button>
         </div>
       </Screen>
@@ -657,14 +800,55 @@ function Confirm({ s, lang, phase, me, setMe, raw }: Ctx & { raw: string }) {
         <WindowTile phase={phase} tile={cat.tile} />
         <p className="instruction">{s.confirmBody(formatMinutes(p.m, s), cat[lang])}</p>
         <p className="muted small">{s.someone} {shortId(p.r)}</p>
-        <button className="primary" disabled={busy} onClick={seal}>{busy ? s.sealing : s.signSeal}</button>
+        {p.k && <p className="badge-live">{s.faceToFace}</p>}
+        {p.k && signed && !rescan && <Checks s={s} state={busy ? "checking" : "waiting"} />}
+        {signed && rescan ? (
+          <>
+            <p className="instruction">{s.scanAgain}</p>
+            <LiveScan
+              key={scanRound}
+              label={s.scanAgain}
+              onCode={(text) => {
+                const m = text.match(/#\/confirm\/([^/]+)\/([^/?#]+)/);
+                const beat = m && m[1] === raw ? decodeBeat(m[2]) : null;
+                if (!beat) return false;
+                void submitLive(signed, beat);
+                return true;
+              }}
+            />
+          </>
+        ) : (
+          <button className="primary" disabled={busy || !!signed} onClick={seal}>{busy || signed ? s.sealing : s.signSeal}</button>
+        )}
         {error && <ErrorNote error={error === "wrong-person" ? s.wrongPerson : friendlyError(error, s)} s={s} />}
       </div>
     </Screen>
   );
 }
 
-function Receipt({ s, hash, seconds }: { s: Strings; hash: Hex; seconds: string }) {
+/** The three things a face-to-face seal proves, shown while Monad checks them and on the receipt. */
+function Checks({ s, state, codeAge }: { s: Strings; state: "waiting" | "checking" | "done"; codeAge?: number | null }) {
+  const items = [s.checkTheirFace, s.checkYourFace, codeAge != null ? s.checkHeartbeatAge(codeAge) : s.checkHeartbeat];
+  return (
+    <ul className={`checks ${state}`}>
+      {items.map((label, i) => (
+        <motion.li
+          key={label}
+          initial={{ opacity: 0, x: -8 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ ...spring, delay: state === "done" ? 1.6 + i * 0.15 : i * 0.12 }}
+        >
+          <span className={state === "checking" && i === 2 ? "check-dot spin" : "check-dot ok"} aria-hidden>
+            {state === "checking" && i === 2 ? "" : "✓"}
+          </span>
+          {label}
+        </motion.li>
+      ))}
+    </ul>
+  );
+}
+
+function Receipt({ s, hash, seconds, codeAge }: { s: Strings; hash: Hex; seconds: string; codeAge?: number | null }) {
   return (
     <motion.div className="receipt" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ ...spring, delay: 1.4 }}>
       <div className="receipt-head">
@@ -672,7 +856,14 @@ function Receipt({ s, hash, seconds }: { s: Strings; hash: Hex; seconds: string 
         <strong>{s.receiptTitle}</strong>
         {seconds && <span className="receipt-time">{s.receiptTime(seconds)}</span>}
       </div>
-      <p>{s.receiptSigned}</p>
+      {codeAge != null ? (
+        <>
+          <p className="receipt-live">{s.faceToFace}</p>
+          <Checks s={s} state="done" codeAge={codeAge} />
+        </>
+      ) : (
+        <p>{s.receiptSigned}</p>
+      )}
       <p className="muted small">{s.receiptWhy}</p>
       <a className="receipt-tx" href={`${chain.EXPLORER}/tx/${hash}`} target="_blank" rel="noreferrer">
         {s.receiptTx} {hash.slice(0, 10)}…{hash.slice(-6)} ↗
@@ -1089,7 +1280,7 @@ export default function App() {
   const [page, arg, arg2] = route;
   let body;
   // Links that work without a local identity: the helper may be on a new phone.
-  if (page === "confirm" && arg) body = <Confirm {...ctx} raw={arg} />;
+  if (page === "confirm" && arg) body = <Confirm {...ctx} raw={arg} beatRaw={arg2} />;
   else if (page === "checkin" && arg) body = <CheckIn {...ctx} challenge={arg as Hex} />;
   else if (page === "door") body = <DoorCheck {...ctx} />;
   else if (page === "demo" && arg) body = <DemoScene {...ctx} which={arg} />;
