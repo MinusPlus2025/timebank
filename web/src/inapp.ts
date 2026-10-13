@@ -22,13 +22,13 @@ export function detectInApp(ua = navigator.userAgent): InApp | null {
   return app ? { zh: app.zh, en: app.en, ios: /iPhone|iPad|iPod/.test(ua) } : null;
 }
 
-/** The app route inside a scanned QR, if the QR is one of ours (same origin), else null. */
+/** The app route inside a scanned QR, if it is one of ours, else null. Any host is accepted
+ * (vercel.app, a custom domain, a mirror), since the route is all the page acts on. */
+const ROUTES = /^\/(u|thank|confirm|checkin|witness|card|door|gift|helped)(\/|$)/;
 export function ourRoute(text: string): string | null {
   try {
-    const u = new URL(text);
-    if (u.origin !== window.location.origin) return null;
-    const route = u.hash.slice(1);
-    return route.startsWith("/") ? route : null;
+    const route = new URL(text).hash.slice(1);
+    return ROUTES.test(route) ? route : null;
   } catch {
     return null;
   }

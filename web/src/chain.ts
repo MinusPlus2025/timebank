@@ -1,4 +1,4 @@
-import { createPublicClient, defineChain, encodeAbiParameters, http, keccak256, type Hex } from "viem";
+import { createPublicClient, defineChain, encodeAbiParameters, fallback, http, keccak256, type Hex } from "viem";
 import { timeBankAbi } from "./abi";
 import type { Assertion } from "./passkey";
 import { DEPLOYED } from "./deployment";
@@ -16,7 +16,13 @@ export const chain = defineChain({
   rpcUrls: { default: { http: [rpcUrl] } },
 });
 
-export const client = createPublicClient({ chain, transport: http(rpcUrl) });
+// Read through our own domain first: anyone who can open the page can then reach the chain,
+// including phones on networks where the public RPC host is slow or blocked. Direct RPC is the backup.
+const proxied = typeof window !== "undefined" ? http(`${window.location.origin}/api/rpc`, { timeout: 6000, retryCount: 0 }) : null;
+export const client = createPublicClient({
+  chain,
+  transport: proxied ? fallback([proxied, http(rpcUrl, { timeout: 8000 })]) : http(rpcUrl),
+});
 
 const contract = { address: TIMEBANK, abi: timeBankAbi } as const;
 
