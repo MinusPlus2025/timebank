@@ -105,6 +105,11 @@ export async function getSealsOf(id: Hex): Promise<SealRecord[]> {
   return Promise.all(ids.map((i) => getSeal(Number(i))));
 }
 
+/** Block of the heartbeat code a face-to-face seal was made with; 0 for ordinary seals. */
+export function getLiveCodeBlock(sealId: number) {
+  return client.readContract({ ...contract, functionName: "liveCodeBlock", args: [BigInt(sealId)] }).then(Number);
+}
+
 export function getPoolBalance() {
   return client.readContract({ ...contract, functionName: "poolBalance" }).then(Number);
 }

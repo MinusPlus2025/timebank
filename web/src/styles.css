@@ -2191,3 +2191,58 @@ h2,
     animation: none;
   }
 }
+
+/* ---------- time passbook ---------- */
+.book-balance {
+  margin: 0 0 6px;
+  font-size: 1.1rem;
+}
+.book-balance strong {
+  font-size: 1.6rem;
+  margin-left: 6px;
+}
+.book {
+  list-style: none;
+  margin: 16px 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+.book-row {
+  display: grid;
+  grid-template-columns: 48px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.book-tile {
+  width: 48px;
+  height: 48px;
+  overflow: hidden;
+  border-radius: 10px;
+}
+.book-what {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.book-what small {
+  opacity: 0.75;
+}
+.book-live {
+  font-style: normal;
+  margin-left: 8px;
+  color: #3f8f5a;
+}
+:root[data-phase="night"] .book-live {
+  color: #8fd3a5;
+}
+.book-amount {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.book-amount.free {
+  font-weight: 500;
+  opacity: 0.7;
+}

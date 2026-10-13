@@ -323,6 +323,7 @@ function Home({ s, lang, phase, me }: Ctx & { me: Me }) {
             {s.available} <strong>{member ? formatMinutes(member.balance, s) : "…"}</strong>
           </span>
           <span className="sky-links">
+            <button className="link" onClick={() => go("/book")}>{s.bookShort}</button>
             <button className="link" onClick={() => go("/door")}>{s.door}</button>
             <button className="link" onClick={() => go("/family")}>{s.familyShort}</button>
             {!!member?.balance && <button className="link" onClick={() => go("/donate")}>{s.donateShort}</button>}
@@ -398,6 +399,61 @@ function Home({ s, lang, phase, me }: Ctx & { me: Me }) {
       )}
       </AnimatePresence>
     </main>
+  );
+}
+
+/** The bank half of a time bank: every seal as a line, newest first, with what it did to the balance. */
+function Passbook({ s, lang, phase, me }: Ctx & { me: Me }) {
+  const [member, setMember] = useState<chain.Member | null>(null);
+  const [rows, setRows] = useState<(chain.SealRecord & { live: boolean })[] | null>(null);
+  useEffect(() => {
+    chain.getMember(me.id).then(setMember).catch(() => undefined);
+    chain
+      .getSealsOf(me.id)
+      .then((list) => Promise.all(list.map(async (x) => ({ ...x, live: (await chain.getLiveCodeBlock(x.id).catch(() => 0)) > 0 }))))
+      .then((list) => setRows(list.reverse()))
+      .catch(() => setRows([]));
+  }, [me.id]);
+  useSpeakOnShow(`${s.bookTitle}。${s.bookIntro}`);
+  const date = (t: number) => new Date(t * 1000).toLocaleDateString(lang === "zh" ? "zh-CN" : "en-GB", { month: "short", day: "numeric" });
+  return (
+    <Screen s={s} title={s.bookTitle} onBack={() => go("/")}>
+      <p className="book-balance">
+        {s.available} <strong>{member ? formatMinutes(member.balance, s) : "…"}</strong>
+      </p>
+      <p className="muted">{s.bookIntro}</p>
+      {rows === null ? (
+        <p className="muted">…</p>
+      ) : rows.length === 0 ? (
+        <p className="muted">{s.bookEmpty}</p>
+      ) : (
+        <ul className="book">
+          {rows.map((r) => {
+            const mine = r.helper === me.id;
+            const amount = mine ? `+${formatMinutes(r.minutes, s)}` : r.redeemed ? `−${formatMinutes(r.minutes, s)}` : s.bookThanks;
+            const kind = mine ? "in" : r.redeemed ? "out" : "free";
+            const cat = CATEGORIES.find((c) => c.id === r.category);
+            return (
+              <li key={r.id} className="book-row">
+                <span className="book-tile"><WindowTile phase={phase} tile={tileFor(r.category)} /></span>
+                <span className="book-what">
+                  <strong>{mine ? s.bookHelped(shortId(r.receiver)) : s.bookGotHelp(shortId(r.helper))}</strong>
+                  <small>
+                    {cat?.[lang]} · {date(r.timestamp)}
+                    {r.live && <em className="book-live">{s.bookInPerson}</em>}
+                  </small>
+                </span>
+                <span className={`book-amount ${kind}`}>{amount}</span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <p className="muted small">{s.bookNote}</p>
+      <a className="link" href={`${chain.EXPLORER}/address/${chain.TIMEBANK}`} target="_blank" rel="noreferrer">
+        {s.bookContract} ↗
+      </a>
+    </Screen>
   );
 }
 
@@ -1331,6 +1387,7 @@ export default function App() {
   else if (page === "demo" && arg) body = <DemoScene {...ctx} which={arg} />;
   else if (!me) body = <Welcome {...ctx} />;
   else if (page === "code") body = <MyCode {...ctx} me={me} />;
+  else if (page === "book") body = <Passbook {...ctx} me={me} />;
   else if (page === "scan") body = <ScanHelp {...ctx} />;
   else if (page === "u" && arg) body = <Person {...ctx} id={arg as Hex} secret={arg2 as Hex | undefined} />;
   else if (page === "thank" && arg) body = <Thank {...ctx} me={me} helper={arg as Hex} />;
