@@ -55,6 +55,10 @@ contract TimeBank {
 
     uint32 public constant MAX_MINUTES_PER_SEAL = 8 hours / 1 minutes;
     uint256 public constant NO_SEAL = type(uint256).max;
+    /// @notice How many blocks a heartbeat code stays valid. At Monad's sub-second blocks this is
+    /// a few seconds: enough for the helper to scan and confirm, too short for a photo to be
+    /// forwarded over chat and used somewhere else.
+    uint256 public constant LIVE_WINDOW = 30;
 
     address public immutable steward;
 
@@ -67,6 +71,10 @@ contract TimeBank {
     /// @notice The one visit a helper has open; arriving somewhere else closes it.
     mapping(bytes32 => bytes32) public openVisitOf;
     mapping(uint256 => bytes32) public visitOfSeal;
+    /// @notice For seals made face to face: the block the receiver's heartbeat code was drawn at (0 otherwise).
+    mapping(uint256 => uint256) public liveCodeBlock;
+    /// @notice Minutes each member has helped with that were proven face to face by a heartbeat code.
+    mapping(bytes32 => uint64) public inPersonMinutes;
     Seal[] public seals;
     uint64 public poolBalance;
 
@@ -92,6 +100,8 @@ contract TimeBank {
     // A verified helper at a door. Only the family card's secret links `tag` to a household.
     event Arrived(bytes32 indexed visitId, bytes32 indexed visitor, bytes32 tag, bytes32 nonce, bytes32 locationHash, bytes32 community);
     // presentMinutes is measured from arrival; a claim above it is left for audit, not rejected.
+    /// @notice The seal was confirmed from a live code on the receiver's screen, drawn at codeBlock.
+    event SealedInPerson(uint256 indexed sealId, uint256 codeBlock, uint256 includedBlock);
     event VisitClosed(bytes32 indexed visitId, uint256 sealId, uint32 claimedMinutes, uint32 presentMinutes);
 
     error NotSteward();
@@ -104,6 +114,9 @@ contract TimeBank {
     error NoGuardian(bytes32 id);
     error Expired();
     error BadVisit(bytes32 visitId);
+    error CodeExpired();
+    error CodeFromFuture();
+    error BadLiveCode();
 
     constructor(address steward_) {
         steward = steward_;
@@ -146,6 +159,64 @@ contract TimeBank {
         bytes32 digest = sealDigest(q);
         if (!digest.verify(receiverSig, r.x, r.y)) revert BadSignature(q.receiver);
         sealId = _seal(q, digest, helperSig, receiverSig.r);
+    }
+
+    /// @notice What both people sign for a face-to-face seal. Same as sealDigest, plus the
+    /// throwaway key the receiver's phone uses to draw heartbeat codes, so only that screen can draw them.
+    function inPersonDigest(SealRequest calldata q, address liveKey) public view returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                "TimeBank.sealInPerson",
+                block.chainid,
+                address(this),
+                q,
+                liveKey,
+                members[q.helper].nonce,
+                members[q.receiver].nonce
+            )
+        );
+    }
+
+    /// @notice What the receiver's live key signs (EIP-191) for the heartbeat code shown at codeBlock.
+    function liveCodeHash(bytes32 digest, uint256 codeBlock) public pure returns (bytes32) {
+        return keccak256(abi.encode("TimeBank.heartbeat", digest, codeBlock));
+    }
+
+    /// @notice Record an hour of help that both people confirmed standing together. The receiver's
+    /// screen shows a code that changes every block; the helper must scan one that is at most
+    /// LIVE_WINDOW blocks old. A photo of the code forwarded over chat goes stale in seconds.
+    /// This stops remote confirmation by a forwarded picture; it does not stop a live video call
+    /// or two people who agree to cheat.
+    function sealInPerson(
+        SealRequest calldata q,
+        address liveKey,
+        uint256 codeBlock,
+        bytes calldata liveSig,
+        WebAuthnP256.Assertion calldata helperSig,
+        WebAuthnP256.Assertion calldata receiverSig
+    ) external returns (uint256 sealId) {
+        if (codeBlock > block.number) revert CodeFromFuture();
+        if (block.number - codeBlock > LIVE_WINDOW) revert CodeExpired();
+        Member storage r = _member(q.receiver);
+        bytes32 digest = inPersonDigest(q, liveKey);
+        if (!digest.verify(receiverSig, r.x, r.y)) revert BadSignature(q.receiver);
+        if (liveKey == address(0) || _recover(liveCodeHash(digest, codeBlock), liveSig) != liveKey) revert BadLiveCode();
+        sealId = _seal(q, digest, helperSig, receiverSig.r);
+        liveCodeBlock[sealId] = codeBlock;
+        inPersonMinutes[q.helper] += q.minutes_;
+        emit SealedInPerson(sealId, codeBlock, block.number);
+    }
+
+    function _recover(bytes32 hash, bytes calldata sig) private pure returns (address) {
+        if (sig.length != 65) return address(0);
+        bytes32 r = bytes32(sig[0:32]);
+        bytes32 s = bytes32(sig[32:64]);
+        uint8 v = uint8(sig[64]);
+        if (v < 27) v += 27;
+        // Reject malleable high-s signatures.
+        if (uint256(s) > 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0) return address(0);
+        bytes32 ethHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", hash));
+        return ecrecover(ethHash, v, r, s);
     }
 
     /// @notice Same as seal, but the receiver's guardian confirms instead of the receiver,

@@ -3,6 +3,9 @@
 // Usage: node e2e/flow.mjs [baseUrl] [screenshotDir]
 import { createRequire } from "node:module";
 import { execSync } from "node:child_process";
+import { writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
@@ -13,8 +16,11 @@ const VIEWPORT = { width: 390, height: 844 };
 
 // E2E_PROXY: route the browser through an outbound proxy (e.g. to reach a public testnet RPC from CI).
 const PROXY = process.env.E2E_PROXY;
+// The helper's in-app camera reads this file: we paint the receiver's live heartbeat code into it.
+const FAKE_CAM = join(tmpdir(), "timebank-heartbeat.y4m");
+const CAMERA_ARGS = ["--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", `--use-file-for-fake-video-capture=${FAKE_CAM}`];
 // Only https goes through it, so the local dev server stays direct.
-const browser = await chromium.launch(PROXY ? { args: [`--proxy-server=https=${new URL(PROXY).host}`] } : {});
+const browser = await chromium.launch({ args: [...CAMERA_ARGS, ...(PROXY ? [`--proxy-server=https=${new URL(PROXY).host}`] : [])] });
 
 async function person(name) {
   const context = await browser.newContext({ viewport: VIEWPORT, locale: "zh-CN", deviceScaleFactor: 2, ignoreHTTPSErrors: !!PROXY });
@@ -94,11 +100,42 @@ async function thankAndSeal(receiver, helper, helperId, { category, minutesLabel
   await shot(receiver, "03-thank-qr");
   await helper.page.goto(url);
   await shot(helper, "04-confirm");
+  // If Face ID takes long enough for the code in the link to age out, the app asks for one live scan.
+  await pointCameraAt(receiver);
   await helper.page.click("button.primary");
   await helper.page.waitForSelector(".celebrate", { timeout: 30000 });
   await helper.page.waitForTimeout(2200);
   await shot(helper, "05-sealed");
+  console.log("receipt:", await helper.page.textContent(".receipt-live"));
 }
+
+// Writes the receiver's current heartbeat QR into the fake camera as a one-frame Y4M video.
+async function pointCameraAt(receiver) {
+  const SIZE = 640;
+  const gray = await receiver.page.evaluate((size) => {
+    const img = document.querySelector("img.qr");
+    const c = document.createElement("canvas");
+    c.width = c.height = size;
+    const ctx = c.getContext("2d");
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(0, 0, size, size);
+    ctx.drawImage(img, 60, 60, size - 120, size - 120);
+    const d = ctx.getImageData(0, 0, size, size).data;
+    const y = new Array(size * size);
+    for (let i = 0; i < size * size; i++) y[i] = Math.round(0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2]);
+    return y;
+  }, SIZE);
+  const header = Buffer.from(`YUV4MPEG2 W${SIZE} H${SIZE} F10:1 Ip A1:1 C420jpeg\nFRAME\n`);
+  const chroma = Buffer.alloc((SIZE / 2) * (SIZE / 2) * 2, 128);
+  writeFileSync(FAKE_CAM, Buffer.concat([header, Buffer.from(gray), chroma]));
+}
+
+const rpc = (method, params = []) =>
+  fetch(process.env.E2E_RPC || "http://127.0.0.1:8545", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+  }).then((r) => r.json());
 
 const wang = await person("小王"); // helper in Shanghai
 const li = await person("李阿姨"); // neighbour who was helped
@@ -113,6 +150,26 @@ const zhaoId = await register(zhao);
 // 1. 李阿姨 thanks 小王 for fixing a pipe; both seal with their passkeys.
 await thankAndSeal(li, wang, wangId, { category: "修理", minutesLabel: "2 小时", pay: false });
 console.log("小王 balance after seal:", await balance(wang));
+
+// 1b. A forwarded photo of the heartbeat code is too old to seal; scanning the live screen works.
+await li.page.goto(`${BASE}#/thank/${wangId}`);
+await li.page.reload(); // same route as before: start a fresh thank-you screen
+await li.page.getByRole("button", { name: "陪伴" }).click();
+await li.page.getByRole("radio", { name: "30 分钟", exact: true }).click();
+await li.page.click("button.primary");
+const photo = await li.page.getAttribute("img.qr", "data-url", { timeout: 30000 });
+await rpc("hardhat_mine", ["0x28"]); // 40 blocks later, as if the photo went through a chat app
+const before = await balance(wang);
+await wang.page.goto(photo);
+await li.page.waitForTimeout(2500); // let the receiver's screen redraw after the 40 mined blocks
+await pointCameraAt(li);
+await wang.page.click("button.primary");
+await wang.page.waitForSelector(".live-scan", { timeout: 30000 });
+console.log("stale photo → asked to scan the live screen");
+await shot(wang, "05b-scan-again");
+await wang.page.waitForSelector(".celebrate", { timeout: 30000 });
+console.log("live rescan sealed:", await wang.page.textContent(".receipt-live"));
+console.log("小王 balance:", before, "→", await balance(wang));
 
 // 2. 小王 gives 1 hour to 妈妈 far away.
 await wang.page.goto(`${BASE}#/gift/${momId}`);

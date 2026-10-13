@@ -20,7 +20,7 @@ The app follows the viewer's local clock: green walls and pink rooms by day, ind
 
 ## What TimeBank does
 1. **Face ID sign-up.** A passkey is your identity. There is no wallet, no seed phrase and no password.
-2. **Two-person seal.** The person who was helped says "thank you" and signs. The helper scans the QR code and signs too. The contract verifies both WebAuthn signatures on-chain, credits the hours, and mints a generative seal.
+2. **Two-person seal, proven face to face.** The person who was helped says "thank you" and signs. Their screen then shows a **heartbeat code**: a QR that is redrawn every second from the newest Monad block. The helper scans it and signs too. The contract verifies both WebAuthn signatures on-chain, checks that the scanned code is at most 30 blocks old, credits the hours, and mints a generative seal. A photo of the code forwarded over a chat app is dead within seconds.
 3. **Give time to family.** A daughter in Shanghai gives her hours to her mother in another city, and a local volunteer takes her mother to the clinic. *"I can't be with you, but someone will be, for me."*
 4. **Anonymous donation** to a community pool, which the community grants to people in need.
 5. **Door check.** Before opening the door, the host shows a QR code. The visitor signs with their passkey, and within about a second the host's screen shows "verified, volunteer of Sunrise Community".
@@ -35,6 +35,7 @@ The app follows the viewer's local clock: green walls and pink rooms by day, ind
 ## Why Monad
 **Measured on Monad testnet**, current contract `0xA15f3aBeABE823726070dF8Cea0e4E52d8bd234d` (v3): a two-passkey seal checks 2 WebAuthn signatures on-chain, uses **307,241 gas**, and was confirmed in **1.7 s** end to end from our test machine (619 ms on the first version, `0x5CffF394…49e`; latency includes our network path). A door check signed by the real person returns true and one signed by an impostor returns false. See `contracts/scripts/smoke.js`.
 
+- **The block clock makes "face to face" checkable.** Each heartbeat code is signed over a recent block number, and the contract accepts it only within `LIVE_WINDOW` = 30 blocks. With Monad's sub-second blocks that is a few seconds, enough to scan and confirm and too short to forward a photo and use it elsewhere. On a 12-second chain the same window would be six minutes, which proves nothing. Seals made this way are marked on-chain (`SealedInPerson`, `liveCodeBlock`, `inPersonMinutes`), so a care organisation or insurer can count verified in-person minutes.
 - **P256 precompile at `0x0100`.** Phone passkeys sign with P-256. Monad verifies those signatures natively, so every seal checks two real Face ID signatures on-chain cheaply. Without the precompile this would cost hundreds of thousands of gas in pure Solidity.
 - **Sub-second finality.** Sealing and door checks happen face to face. A result in about a second feels like a stamp landing. Twelve-second blocks would not.
 - **Throughput and fees.** Each act of help is a small write, which adds up to many writes at city scale. Community groups can't pay high fees.
@@ -44,14 +45,19 @@ The app follows the viewer's local clock: green walls and pink rooms by day, ind
  receiver phone                    helper phone                     Monad
  ─────────────                     ────────────                     ─────
  pick help + minutes
- digest = sealDigest(...)  (eth_call)
+ throwaway live key (memory only)
+ digest = inPersonDigest(q, liveKey)  (eth_call)
  Face ID → WebAuthn assertion
- show QR ───────────────────────▶  scan, review
+ every second: sign(digest, latest
+ block) with live key → heartbeat QR ─▶ scan, review
                                    Face ID → assertion
-                                   POST /api/relay ──────────────▶  TimeBank.seal()
+                                   code too old? scan the live screen once more
+                                   POST /api/relay ──────────────▶  TimeBank.sealInPerson()
+                                                                    ├ code block ≤ 30 blocks old
+                                                                    ├ heartbeat signed by the Face-ID-approved live key
                                                                     ├ verify 2 × WebAuthn via P256 precompile
                                                                     ├ credit hours, bump nonces
-                                                                    └ emit Sealed(seed)
+                                                                    └ emit Sealed(seed), SealedInPerson(codeBlock)
                                    seal lands (animation + sound) ◀─┘
 ```
 - `contracts/contracts/WebAuthnP256.sol`: rebuilds clientDataJSON around the challenge, requires the user-verified flag, and calls the precompile.
@@ -63,7 +69,7 @@ The app follows the viewer's local clock: green walls and pink rooms by day, ind
 ### Contracts
 ```bash
 cd contracts && npm install
-npx hardhat test                       # 19 tests, real P-256 WebAuthn signatures
+npx hardhat test                       # 40 tests, real P-256 WebAuthn signatures
 ```
 ### Local end-to-end test (virtual passkeys)
 ```bash
@@ -71,7 +77,7 @@ cd contracts && npx hardhat node                                  # terminal 1
 cd contracts && npx hardhat run scripts/deploy.js --network localhost
 cd web && cp .env.example .env.local   # fill in the local address, RPC http://127.0.0.1:8545, chain 31337, a hardhat key as relayer
 npm install && npm run dev                                        # terminal 2
-node e2e/flow.mjs http://localhost:5173/ ../assets/screenshots    # 4 people: seal → gift → redeem → door check
+node e2e/flow.mjs http://localhost:5173/ ../assets/screenshots    # 4 people: seal → forwarded photo refused → gift → redeem → door check
 ```
 ### Deploy to Monad testnet
 ```bash
@@ -83,6 +89,7 @@ Then deploy `web/` to Vercel with the environment variables in `web/.env.example
 - We are not the first "blockchain + time bank". Government and consortium-chain pilots exist. Our difference is a public chain, user-held records, cross-community recognition, and two-person passkey seals.
 - A chain fixes record-keeping and trust. It does not fix low participation, which needs community work.
 - Older people may need family or community staff to help them set up a passkey.
+- **What the heartbeat code does not stop.** It defeats a forwarded photo, for example an older person tricked into sending a picture of the code. It does not stop a live video call that relays the screen in real time, and it does not stop two people who agree to cheat. Two signatures stop one-sided fraud; the public record makes audits of collusion cheap, not impossible.
 - Passkeys can sync through Apple or Google accounts, so a compromised cloud account is a risk. Future work: community-approved device changes.
 
 ## Disclosures

@@ -32,8 +32,9 @@ export function idOf(x: Hex, y: Hex): Hex {
 export const shortId = (id: Hex) => id.slice(2, 6).toUpperCase();
 
 /** What the first signer hands to the second: everything needed to co-sign the seal.
- * v: the helper's door arrival (zero if none); t: deadline in seconds since 1970. */
-export type SealPayload = { h: Hex; r: Hex; m: number; c: number; d: boolean; v: Hex; t: number; a: Assertion };
+ * v: the helper's door arrival (zero if none); t: deadline in seconds since 1970;
+ * k: for face-to-face seals, the throwaway key the receiver's screen draws heartbeat codes with. */
+export type SealPayload = { h: Hex; r: Hex; m: number; c: number; d: boolean; v: Hex; t: number; a: Assertion; k?: Hex };
 
 const ZERO32 = "0x0000000000000000000000000000000000000000000000000000000000000000" as Hex;
 
@@ -43,12 +44,14 @@ const fromB64url = (s: string) => Uint8Array.from(atob(s.replace(/-/g, "+").repl
 
 // Packed binary keeps the QR code sparse enough for older phone cameras:
 // helper(32) receiver(32) minutes(2) category(1) flags(1) deadline(4) [visit(32) if flag] authDataLen(1) authData r(32) s(32) clientDataSuffix(utf8)
-// flags: bit0 redeem, bit1 has visit
+// [liveKey(20) if flag] after the visit.
+// flags: bit0 redeem, bit1 has visit, bit2 face to face (has live key)
 export function encodeSealPayload(p: SealPayload): string {
   const auth = hexToBytes(p.a.authenticatorData);
   const suffix = new TextEncoder().encode(p.a.clientDataSuffix);
   const hasVisit = p.v !== ZERO32;
-  const out = new Uint8Array(32 + 32 + 2 + 1 + 1 + 4 + (hasVisit ? 32 : 0) + 1 + auth.length + 64 + suffix.length);
+  const live = p.k ? hexToBytes(p.k) : new Uint8Array(0);
+  const out = new Uint8Array(32 + 32 + 2 + 1 + 1 + 4 + (hasVisit ? 32 : 0) + live.length + 1 + auth.length + 64 + suffix.length);
   let i = 0;
   const put = (b: Uint8Array) => {
     out.set(b, i);
@@ -56,9 +59,10 @@ export function encodeSealPayload(p: SealPayload): string {
   };
   put(hexToBytes(p.h));
   put(hexToBytes(p.r));
-  put(new Uint8Array([p.m >> 8, p.m & 0xff, p.c, (p.d ? 1 : 0) | (hasVisit ? 2 : 0)]));
+  put(new Uint8Array([p.m >> 8, p.m & 0xff, p.c, (p.d ? 1 : 0) | (hasVisit ? 2 : 0) | (p.k ? 4 : 0)]));
   put(new Uint8Array([p.t >>> 24, (p.t >>> 16) & 0xff, (p.t >>> 8) & 0xff, p.t & 0xff]));
   if (hasVisit) put(hexToBytes(p.v));
+  put(live);
   put(new Uint8Array([auth.length]));
   put(auth);
   put(hexToBytes(p.a.r));
@@ -76,13 +80,35 @@ export function decodeSealPayload(s: string): SealPayload {
   const [m1, m2, c, flags] = take(4);
   const [t1, t2, t3, t4] = take(4);
   const v = flags & 2 ? bytesToHex(take(32)) : ZERO32;
+  const k = flags & 4 ? bytesToHex(take(20)) : undefined;
   const [authLen] = take(1);
   const authenticatorData = bytesToHex(take(authLen));
   const sigR = bytesToHex(take(32));
   const sigS = bytesToHex(take(32));
   const clientDataSuffix = new TextDecoder().decode(b.slice(i));
   const t = ((t1 << 24) | (t2 << 16) | (t3 << 8) | t4) >>> 0;
-  return { h, r, m: (m1 << 8) | m2, c, d: (flags & 1) === 1, v, t, a: { authenticatorData, clientDataSuffix, r: sigR, s: sigS } };
+  return { h, r, m: (m1 << 8) | m2, c, d: (flags & 1) === 1, v, t, a: { authenticatorData, clientDataSuffix, r: sigR, s: sigS }, ...(k ? { k } : {}) };
+}
+
+/** One heartbeat: the block the receiver's screen drew the code at, signed by its live key. */
+export type Beat = { block: bigint; sig: Hex };
+
+// block(8) sig(65), appended to the confirm link as its own path segment.
+export function encodeBeat(b: Beat): string {
+  const out = new Uint8Array(8 + 65);
+  new DataView(out.buffer).setBigUint64(0, b.block);
+  out.set(hexToBytes(b.sig), 8);
+  return toB64url(out);
+}
+
+export function decodeBeat(s: string): Beat | null {
+  try {
+    const b = fromB64url(s);
+    if (b.length !== 73) return null;
+    return { block: new DataView(b.buffer).getBigUint64(0), sig: bytesToHex(b.slice(8)) };
+  } catch {
+    return null;
+  }
 }
 
 // Relatives this device looks after as guardian. Names stay local, like the user's own name.

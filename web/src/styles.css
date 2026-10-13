@@ -1918,3 +1918,61 @@ body {
     box-shadow: none;
   }
 }
+
+/* ---------- heartbeat code (face-to-face seals) ---------- */
+.heartbeat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.heartbeat-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+.heartbeat-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #e0565b;
+  box-shadow: 0 0 0 4px rgba(224, 86, 91, 0.18);
+}
+.badge-live {
+  display: inline-block;
+  margin: 4px auto 12px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #b8423f;
+  background: rgba(224, 86, 91, 0.12);
+}
+.live-scan {
+  position: relative;
+  width: min(80vw, 320px);
+  aspect-ratio: 1;
+  margin: 0 auto 12px;
+  border-radius: 18px;
+  overflow: hidden;
+  background: #111;
+}
+.live-scan video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.live-scan-frame {
+  position: absolute;
+  inset: 14%;
+  border: 3px solid rgba(255, 255, 255, 0.85);
+  border-radius: 14px;
+}
+.receipt-live {
+  color: #b8423f;
+  font-weight: 600;
+}

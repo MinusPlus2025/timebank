@@ -347,4 +347,112 @@ describe("TimeBank", () => {
       );
     });
   });
+
+  describe("sealInPerson (heartbeat code)", () => {
+    // The receiver's phone makes a throwaway key, signs the seal once with Face ID, then
+    // draws a fresh code every block by signing (digest, blockNumber) with the throwaway key.
+    async function heartbeat(q, { live = ethers.Wallet.createRandom(), ageBlocks = 0 } = {}) {
+      const digest = await bank.inPersonDigest(q, live.address);
+      const receiverSig = bob.sign(digest);
+      const codeBlock = BigInt(await ethers.provider.getBlockNumber());
+      const liveSig = await live.signMessage(ethers.getBytes(await bank.liveCodeHash(digest, codeBlock)));
+      if (ageBlocks) await ethers.provider.send("hardhat_mine", ["0x" + ageBlocks.toString(16)]);
+      return { digest, receiverSig, codeBlock, liveSig, live };
+    }
+
+    it("seals when the helper scans a fresh code and records it as face to face", async () => {
+      const q = req(aliceId, bobId, 60, CARE, false);
+      const c = await heartbeat(q);
+      const tx = bank.sealInPerson(q, c.live.address, c.codeBlock, c.liveSig, alice.sign(c.digest), c.receiverSig);
+      await expect(tx).to.emit(bank, "Sealed");
+      await expect(tx).to.emit(bank, "SealedInPerson").withArgs(0, c.codeBlock, c.codeBlock + 1n);
+      expect(await bank.liveCodeBlock(0)).to.equal(c.codeBlock);
+      expect(await bank.inPersonMinutes(aliceId)).to.equal(60);
+      expect((await bank.members(aliceId)).balance).to.equal(60);
+    });
+
+    it("accepts a code up to LIVE_WINDOW blocks old", async () => {
+      const q = req(aliceId, bobId, 30, CARE, false);
+      const window = Number(await bank.LIVE_WINDOW());
+      const c = await heartbeat(q, { ageBlocks: window - 1 });
+      await expect(bank.sealInPerson(q, c.live.address, c.codeBlock, c.liveSig, alice.sign(c.digest), c.receiverSig)).to.emit(
+        bank,
+        "SealedInPerson"
+      );
+    });
+
+    it("rejects a forwarded photo of the code once it is older than LIVE_WINDOW", async () => {
+      const q = req(aliceId, bobId, 60, CARE, false);
+      const window = Number(await bank.LIVE_WINDOW());
+      const c = await heartbeat(q, { ageBlocks: window });
+      await expect(
+        bank.sealInPerson(q, c.live.address, c.codeBlock, c.liveSig, alice.sign(c.digest), c.receiverSig)
+      ).to.be.revertedWithCustomError(bank, "CodeExpired");
+    });
+
+    it("rejects a code dated in the future to stretch its life", async () => {
+      const q = req(aliceId, bobId, 60, CARE, false);
+      const live = ethers.Wallet.createRandom();
+      const digest = await bank.inPersonDigest(q, live.address);
+      const future = BigInt(await ethers.provider.getBlockNumber()) + 100n;
+      const liveSig = await live.signMessage(ethers.getBytes(await bank.liveCodeHash(digest, future)));
+      await expect(
+        bank.sealInPerson(q, live.address, future, liveSig, alice.sign(digest), bob.sign(digest))
+      ).to.be.revertedWithCustomError(bank, "CodeFromFuture");
+    });
+
+    it("rejects a code not drawn by the receiver's screen", async () => {
+      const q = req(aliceId, bobId, 60, CARE, false);
+      const c = await heartbeat(q);
+      const forger = ethers.Wallet.createRandom();
+      const forged = await forger.signMessage(ethers.getBytes(await bank.liveCodeHash(c.digest, c.codeBlock)));
+      await expect(
+        bank.sealInPerson(q, c.live.address, c.codeBlock, forged, alice.sign(c.digest), c.receiverSig)
+      ).to.be.revertedWithCustomError(bank, "BadLiveCode");
+    });
+
+    it("rejects a code re-dated to a newer block without the screen's key", async () => {
+      const q = req(aliceId, bobId, 60, CARE, false);
+      const c = await heartbeat(q, { ageBlocks: 40 });
+      const now = BigInt(await ethers.provider.getBlockNumber());
+      await expect(
+        bank.sealInPerson(q, c.live.address, now, c.liveSig, alice.sign(c.digest), c.receiverSig)
+      ).to.be.revertedWithCustomError(bank, "BadLiveCode");
+    });
+
+    it("binds the receiver's Face ID to this one screen key", async () => {
+      const q = req(aliceId, bobId, 60, CARE, false);
+      const c = await heartbeat(q);
+      const other = ethers.Wallet.createRandom();
+      const liveSig = await other.signMessage(ethers.getBytes(await bank.liveCodeHash(c.digest, c.codeBlock)));
+      await expect(
+        bank.sealInPerson(q, other.address, c.codeBlock, liveSig, alice.sign(c.digest), c.receiverSig)
+      ).to.be.revertedWithCustomError(bank, "BadSignature").withArgs(bobId);
+    });
+
+    it("does not accept an ordinary seal signature on the face-to-face path", async () => {
+      const q = req(aliceId, bobId, 60, CARE, false);
+      const plain = await bank.sealDigest(q);
+      const c = await heartbeat(q);
+      await expect(
+        bank.sealInPerson(q, c.live.address, c.codeBlock, c.liveSig, alice.sign(plain), bob.sign(plain))
+      ).to.be.revertedWithCustomError(bank, "BadSignature").withArgs(bobId);
+    });
+
+    it("cannot be replayed", async () => {
+      const q = req(aliceId, bobId, 60, CARE, false);
+      const c = await heartbeat(q);
+      const h = alice.sign(c.digest);
+      await bank.sealInPerson(q, c.live.address, c.codeBlock, c.liveSig, h, c.receiverSig);
+      await expect(
+        bank.sealInPerson(q, c.live.address, c.codeBlock, c.liveSig, h, c.receiverSig)
+      ).to.be.revertedWithCustomError(bank, "BadSignature");
+    });
+
+    it("leaves ordinary seals unmarked", async () => {
+      await sealHelp(alice, aliceId, bob, bobId, 60, CARE, false);
+      expect(await bank.liveCodeBlock(0)).to.equal(0);
+      expect(await bank.inPersonMinutes(aliceId)).to.equal(0);
+    });
+  });
 });

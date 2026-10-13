@@ -17,6 +17,11 @@ export const timeBankAbi = [
     "type": "error"
   },
   {
+    "inputs": [],
+    "name": "BadLiveCode",
+    "type": "error"
+  },
+  {
     "inputs": [
       {
         "internalType": "bytes32",
@@ -36,6 +41,16 @@ export const timeBankAbi = [
       }
     ],
     "name": "BadVisit",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "CodeExpired",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "CodeFromFuture",
     "type": "error"
   },
   {
@@ -340,6 +355,31 @@ export const timeBankAbi = [
     "inputs": [
       {
         "indexed": true,
+        "internalType": "uint256",
+        "name": "sealId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "codeBlock",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "includedBlock",
+        "type": "uint256"
+      }
+    ],
+    "name": "SealedInPerson",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
         "internalType": "bytes32",
         "name": "visitId",
         "type": "bytes32"
@@ -365,6 +405,19 @@ export const timeBankAbi = [
     ],
     "name": "VisitClosed",
     "type": "event"
+  },
+  {
+    "inputs": [],
+    "name": "LIVE_WINDOW",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
   },
   {
     "inputs": [],
@@ -823,6 +876,129 @@ export const timeBankAbi = [
   {
     "inputs": [
       {
+        "components": [
+          {
+            "internalType": "bytes32",
+            "name": "helper",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "receiver",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "minutes_",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint8",
+            "name": "category",
+            "type": "uint8"
+          },
+          {
+            "internalType": "bool",
+            "name": "redeem",
+            "type": "bool"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "visitId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "deadline",
+            "type": "uint64"
+          }
+        ],
+        "internalType": "struct TimeBank.SealRequest",
+        "name": "q",
+        "type": "tuple"
+      },
+      {
+        "internalType": "address",
+        "name": "liveKey",
+        "type": "address"
+      }
+    ],
+    "name": "inPersonDigest",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "name": "inPersonMinutes",
+    "outputs": [
+      {
+        "internalType": "uint64",
+        "name": "",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "name": "liveCodeBlock",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "digest",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "codeBlock",
+        "type": "uint256"
+      }
+    ],
+    "name": "liveCodeHash",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "pure",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "bytes32",
         "name": "x",
         "type": "bytes32"
@@ -1272,6 +1448,131 @@ export const timeBankAbi = [
       }
     ],
     "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "components": [
+          {
+            "internalType": "bytes32",
+            "name": "helper",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "receiver",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint32",
+            "name": "minutes_",
+            "type": "uint32"
+          },
+          {
+            "internalType": "uint8",
+            "name": "category",
+            "type": "uint8"
+          },
+          {
+            "internalType": "bool",
+            "name": "redeem",
+            "type": "bool"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "visitId",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "uint64",
+            "name": "deadline",
+            "type": "uint64"
+          }
+        ],
+        "internalType": "struct TimeBank.SealRequest",
+        "name": "q",
+        "type": "tuple"
+      },
+      {
+        "internalType": "address",
+        "name": "liveKey",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "codeBlock",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bytes",
+        "name": "liveSig",
+        "type": "bytes"
+      },
+      {
+        "components": [
+          {
+            "internalType": "bytes",
+            "name": "authenticatorData",
+            "type": "bytes"
+          },
+          {
+            "internalType": "string",
+            "name": "clientDataSuffix",
+            "type": "string"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "r",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "s",
+            "type": "bytes32"
+          }
+        ],
+        "internalType": "struct WebAuthnP256.Assertion",
+        "name": "helperSig",
+        "type": "tuple"
+      },
+      {
+        "components": [
+          {
+            "internalType": "bytes",
+            "name": "authenticatorData",
+            "type": "bytes"
+          },
+          {
+            "internalType": "string",
+            "name": "clientDataSuffix",
+            "type": "string"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "r",
+            "type": "bytes32"
+          },
+          {
+            "internalType": "bytes32",
+            "name": "s",
+            "type": "bytes32"
+          }
+        ],
+        "internalType": "struct WebAuthnP256.Assertion",
+        "name": "receiverSig",
+        "type": "tuple"
+      }
+    ],
+    "name": "sealInPerson",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "sealId",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {

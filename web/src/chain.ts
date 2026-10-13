@@ -1,4 +1,4 @@
-import { createPublicClient, defineChain, http, type Hex } from "viem";
+import { createPublicClient, defineChain, encodeAbiParameters, http, keccak256, type Hex } from "viem";
 import { timeBankAbi } from "./abi";
 import type { Assertion } from "./passkey";
 import { DEPLOYED } from "./deployment";
@@ -47,6 +47,21 @@ export const NO_VISIT = "0x00000000000000000000000000000000000000000000000000000
 export function sealDigest(q: SealRequest) {
   return client.readContract({ ...contract, functionName: "sealDigest", args: [{ ...q, deadline: BigInt(q.deadline) }] });
 }
+
+/** Same as sealDigest, plus the throwaway key the receiver's screen draws heartbeat codes with. */
+export function inPersonDigest(q: SealRequest, liveKey: Hex) {
+  return client.readContract({ ...contract, functionName: "inPersonDigest", args: [{ ...q, deadline: BigInt(q.deadline) }, liveKey] });
+}
+
+/** Mirrors TimeBank.LIVE_WINDOW: how many blocks a heartbeat code stays valid on-chain. */
+export const LIVE_WINDOW = 30;
+
+/** Mirrors TimeBank.liveCodeHash; computed locally so the screen can redraw without a call. */
+export const liveCodeHash = (digest: Hex, codeBlock: bigint) =>
+  keccak256(encodeAbiParameters([{ type: "string" }, { type: "bytes32" }, { type: "uint256" }], ["TimeBank.heartbeat", digest, codeBlock]));
+
+/** The newest block, never cached: heartbeat codes are only as fresh as this. */
+export const latestBlock = () => client.getBlockNumber({ cacheTime: 0 });
 
 /** Seconds since 1970, the unit of seal deadlines. */
 export const nowSeconds = () => Math.floor(Date.now() / 1000);
@@ -111,9 +126,9 @@ export function getGuardian(id: Hex) {
 
 export const hasGuardian = (g: Hex) => BigInt(g) !== 0n;
 
-type RelayFn = "register" | "seal" | "gift" | "donate" | "checkIn" | "registerDependent" | "sealByGuardian" | "arrive";
+type RelayFn = "register" | "seal" | "sealInPerson" | "gift" | "donate" | "checkIn" | "registerDependent" | "sealByGuardian" | "arrive";
 
-export async function relay(fn: RelayFn, args: unknown[]): Promise<{ hash: Hex }> {
+export async function relay(fn: RelayFn, args: unknown[]): Promise<{ hash: Hex; blockNumber?: string }> {
   const res = await fetch("/api/relay", {
     method: "POST",
     headers: { "content-type": "application/json" },
