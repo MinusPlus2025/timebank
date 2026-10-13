@@ -18,7 +18,7 @@
 | 项目 | 链接 |
 |---|---|
 | 官网 / 报名 | https://www.monad.xyz/metropolis |
-| GitHub | https://github.com/MinusPlus2025/monad-metropolis-2026 |
+| GitHub | https://github.com/MinusPlus2025/timebank (public; renamed from monad-metropolis-2026 on 2026-10-13) |
 | 在线 Demo | https://monad-metropolis-2026.vercel.app/ |
 | 演示视频 | （待定） |
 | 合约地址 | Monad testnet `0xA15f3aBeABE823726070dF8Cea0e4E52d8bd234d`（v3：盲化到门记录、上门起止、确认码限时；v2 `0x3AE3…9Db5`、v1 `0x5CffF…949e` 已停用） |
