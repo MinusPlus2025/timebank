@@ -13,6 +13,7 @@ import { Wordmark } from "./Brand";
 import { CountUp, Door, Facade, Garland, PaperPlane, TILE, WindowTile, spring } from "./Windows";
 import { Onboarding, Street } from "./Onboarding";
 import { LiveScan } from "./LiveScan";
+import { detectInApp, ourRoute, type InApp } from "./inapp";
 import { configureVoice, speak, speakFromTap, useSpeakOnShow, voiceSupported } from "./voice";
 
 // ---------- routing & app state ----------
@@ -322,6 +323,7 @@ function Home({ s, lang, phase, me }: Ctx & { me: Me }) {
             {s.available} <strong>{member ? formatMinutes(member.balance, s) : "…"}</strong>
           </span>
           <span className="sky-links">
+            <button className="link" onClick={() => go("/book")}>{s.bookShort}</button>
             <button className="link" onClick={() => go("/door")}>{s.door}</button>
             <button className="link" onClick={() => go("/family")}>{s.familyShort}</button>
             {!!member?.balance && <button className="link" onClick={() => go("/donate")}>{s.donateShort}</button>}
@@ -400,6 +402,61 @@ function Home({ s, lang, phase, me }: Ctx & { me: Me }) {
   );
 }
 
+/** The bank half of a time bank: every seal as a line, newest first, with what it did to the balance. */
+function Passbook({ s, lang, phase, me }: Ctx & { me: Me }) {
+  const [member, setMember] = useState<chain.Member | null>(null);
+  const [rows, setRows] = useState<(chain.SealRecord & { live: boolean })[] | null>(null);
+  useEffect(() => {
+    chain.getMember(me.id).then(setMember).catch(() => undefined);
+    chain
+      .getSealsOf(me.id)
+      .then((list) => Promise.all(list.map(async (x) => ({ ...x, live: (await chain.getLiveCodeBlock(x.id).catch(() => 0)) > 0 }))))
+      .then((list) => setRows(list.reverse()))
+      .catch(() => setRows([]));
+  }, [me.id]);
+  useSpeakOnShow(`${s.bookTitle}。${s.bookIntro}`);
+  const date = (t: number) => new Date(t * 1000).toLocaleDateString(lang === "zh" ? "zh-CN" : "en-GB", { month: "short", day: "numeric" });
+  return (
+    <Screen s={s} title={s.bookTitle} onBack={() => go("/")}>
+      <p className="book-balance">
+        {s.available} <strong>{member ? formatMinutes(member.balance, s) : "…"}</strong>
+      </p>
+      <p className="muted">{s.bookIntro}</p>
+      {rows === null ? (
+        <p className="muted">…</p>
+      ) : rows.length === 0 ? (
+        <p className="muted">{s.bookEmpty}</p>
+      ) : (
+        <ul className="book">
+          {rows.map((r) => {
+            const mine = r.helper === me.id;
+            const amount = mine ? `+${formatMinutes(r.minutes, s)}` : r.redeemed ? `−${formatMinutes(r.minutes, s)}` : s.bookThanks;
+            const kind = mine ? "in" : r.redeemed ? "out" : "free";
+            const cat = CATEGORIES.find((c) => c.id === r.category);
+            return (
+              <li key={r.id} className="book-row">
+                <span className="book-tile"><WindowTile phase={phase} tile={tileFor(r.category)} /></span>
+                <span className="book-what">
+                  <strong>{mine ? s.bookHelped(shortId(r.receiver)) : s.bookGotHelp(shortId(r.helper))}</strong>
+                  <small>
+                    {cat?.[lang]} · {date(r.timestamp)}
+                    {r.live && <em className="book-live">{s.bookInPerson}</em>}
+                  </small>
+                </span>
+                <span className={`book-amount ${kind}`}>{amount}</span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <p className="muted small">{s.bookNote}</p>
+      <a className="link" href={`${chain.EXPLORER}/address/${chain.TIMEBANK}`} target="_blank" rel="noreferrer">
+        {s.bookContract} ↗
+      </a>
+    </Screen>
+  );
+}
+
 function MyCode({ s, phase, me }: Ctx & { me: Me }) {
   const url = appUrl(`/u/${me.id}`);
   useSpeakOnShow(`${s.myCode}。${s.myCodeHint}`);
@@ -411,6 +468,7 @@ function MyCode({ s, phase, me }: Ctx & { me: Me }) {
           <span className="qr-badge"><WindowTile phase={phase} tile={TILE.you} /></span>
         </div>
         <p className="muted">{s.myCodeHint}</p>
+        <button className="primary" onClick={() => go("/scan")}>{s.scanTheirCode}</button>
         <CopyLink url={url} s={s} />
       </div>
     </Screen>
@@ -440,14 +498,55 @@ function DemoScene({ phase, which }: Ctx & { which: string }) {
   );
 }
 
+/** Scans any timebank code in the page itself, so nobody needs WeChat, Alipay or the system camera. */
 function ScanHelp({ s, phase }: Ctx) {
+  const [scanning, setScanning] = useState(false);
+  const [notOurs, setNotOurs] = useState(false);
   useSpeakOnShow(`${s.scanTitle}${s.scanBody}`);
   return (
     <Screen s={s} title={s.scanTitle} onBack={() => go("/")}>
-      <div className="person-window"><WindowTile phase={phase} tile={4} lightAt={0.3} /></div>
-      <p className="instruction">{s.scanBody}</p>
+      {scanning ? (
+        <>
+          <p className="instruction">{s.scanPoint}</p>
+          <LiveScan
+            label={s.scanPoint}
+            onCode={(text) => {
+              const route = ourRoute(text);
+              if (!route) {
+                setNotOurs(true);
+                return false;
+              }
+              go(route);
+              return true;
+            }}
+          />
+          {notOurs && <p className="note warn small">{s.scanNotOurs}</p>}
+        </>
+      ) : (
+        <>
+          <div className="person-window"><WindowTile phase={phase} tile={4} lightAt={0.3} /></div>
+          <p className="instruction">{s.scanBody}</p>
+          <button className="primary" onClick={() => setScanning(true)}>{s.scanNow}</button>
+        </>
+      )}
       <p className="muted">{s.scanCopy}</p>
     </Screen>
+  );
+}
+
+/** Shown inside chat apps' built-in browsers, where passkeys don't work. */
+function OpenInBrowser({ s, lang, app, onClose }: { s: Strings; lang: Lang; app: InApp; onClose: () => void }) {
+  return (
+    <div className="overlay inapp" role="dialog" aria-label={s.inAppTitle}>
+      <span className="inapp-arrow" aria-hidden>↗</span>
+      <section className="settings-sheet">
+        <h2>{s.inAppTitle}</h2>
+        <p className="instruction">{s.inAppBody(app[lang], app.ios)}</p>
+        <p className="muted small">{s.inAppCopy}</p>
+        <CopyLink url={window.location.href} s={s} />
+        <button className="link" onClick={onClose}>{s.inAppContinue}</button>
+      </section>
+    </div>
   );
 }
 
@@ -1228,6 +1327,8 @@ export default function App() {
   const params = new URLSearchParams(window.location.search);
   const [themePref, setThemePref] = useState<ThemePref>(() => readPref("timebank.theme", "time") as ThemePref);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Asked again on every visit: dismissing it doesn't make Face ID work in there.
+  const [inApp, setInApp] = useState(detectInApp);
   const phase = usePhase(themePref, (params.get("phase") as Phase | null) ?? null);
   const [me, setMeState] = useState<Me | null>(loadMe);
   const s = strings[lang];
@@ -1286,6 +1387,7 @@ export default function App() {
   else if (page === "demo" && arg) body = <DemoScene {...ctx} which={arg} />;
   else if (!me) body = <Welcome {...ctx} />;
   else if (page === "code") body = <MyCode {...ctx} me={me} />;
+  else if (page === "book") body = <Passbook {...ctx} me={me} />;
   else if (page === "scan") body = <ScanHelp {...ctx} />;
   else if (page === "u" && arg) body = <Person {...ctx} id={arg as Hex} secret={arg2 as Hex | undefined} />;
   else if (page === "thank" && arg) body = <Thank {...ctx} me={me} helper={arg as Hex} />;
@@ -1314,6 +1416,14 @@ export default function App() {
           </button>
         </div>
       </header>
+      {inApp && (
+        <OpenInBrowser
+          s={s}
+          lang={lang}
+          app={inApp}
+          onClose={() => setInApp(null)}
+        />
+      )}
       <AnimatePresence>
         {settingsOpen && (
           <motion.div className="overlay" onClick={() => setSettingsOpen(false)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>

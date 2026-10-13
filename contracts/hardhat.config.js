@@ -1,5 +1,6 @@
 require("@nomicfoundation/hardhat-ethers");
 require("@nomicfoundation/hardhat-chai-matchers");
+require("@nomicfoundation/hardhat-verify");
 const { subtask } = require("hardhat/config");
 const { TASK_COMPILE_SOLIDITY_GET_SOLC_BUILD } = require("hardhat/builtin-tasks/task-names");
 
@@ -27,4 +28,11 @@ module.exports = {
       accounts,
     },
   },
+  // `npx hardhat verify --network monadTestnet <address>` publishes the source on MonadVision.
+  sourcify: {
+    enabled: true,
+    apiUrl: "https://sourcify-api-monad.blockvision.org",
+    browserUrl: "https://testnet.monadvision.com",
+  },
+  etherscan: { enabled: false },
 };

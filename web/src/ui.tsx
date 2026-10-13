@@ -19,7 +19,7 @@ export function Screen({ title, children, onBack, s }: { title?: string; childre
 export function QR({ value, label }: { value: string; label: string }) {
   const [src, setSrc] = useState("");
   useEffect(() => {
-    QRCode.toDataURL(value, { margin: 1, width: 560, color: { dark: "#1f1a17", light: "#fbf7ef" } }).then(setSrc);
+    QRCode.toDataURL(value, { margin: 1, width: 560, errorCorrectionLevel: "L", color: { dark: "#1f1a17", light: "#fbf7ef" } }).then(setSrc);
   }, [value]);
   return src ? <img className="qr" src={src} alt={label} data-url={value} /> : <div className="qr" />;
 }
