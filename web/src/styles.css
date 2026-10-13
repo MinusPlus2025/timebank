@@ -1918,3 +1918,90 @@ body {
     box-shadow: none;
   }
 }
+
+/* ---------- polish v3 (2026-10-13): lighter guidance, no wrapping, calmer desktop ---------- */
+/* Guidance reads as quiet text on the wall, not another card. */
+.how {
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  margin: 8px 24px 0;
+  padding: 18px 0 4px;
+}
+.how li {
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+}
+.step-num {
+  background: transparent !important;
+  color: var(--glow) !important;
+  border: 1.5px solid var(--glow);
+}
+/* Short links never break mid-phrase; the row wraps as a whole instead. */
+.sky-meta {
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+.sky-links {
+  flex-wrap: wrap;
+  gap: 6px 18px;
+}
+.sky-meta .link {
+  white-space: nowrap;
+  text-decoration-color: color-mix(in srgb, var(--ink-soft) 40%, transparent);
+  text-underline-offset: 4px;
+}
+/* The two main actions stay one line each on a 360px phone. */
+.dock-btn {
+  white-space: nowrap;
+  font-size: 0.92rem;
+  padding: 8px 6px;
+}
+.dock-btn small {
+  white-space: nowrap;
+}
+/* My code: the QR sits on the page, not in a card inside the page. */
+.screen > .sheet.center:has(canvas, svg, img) {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  padding-left: 0;
+  padding-right: 0;
+}
+@media (min-width: 900px) {
+  /* Left: numbers and actions. Right: the building, with guidance above it. */
+  .home {
+    grid-template-columns: minmax(320px, 380px) 1fr;
+    grid-auto-flow: row dense;
+    column-gap: 72px;
+    align-items: start;
+  }
+  .home > .sky {
+    grid-column: 1;
+    grid-row: 1 / span 3;
+  }
+  .home > .how,
+  .home > .facade {
+    grid-column: 2;
+  }
+  .home > .how {
+    margin: 0 0 8px;
+    padding-top: 0;
+    border-top: 0;
+  }
+  .facade-grid {
+    max-width: 720px;
+    gap: 8px 28px;
+    padding: 0;
+  }
+  .dock {
+    border: 0;
+    box-shadow: none;
+    padding: 0;
+  }
+  .dock-btn {
+    min-height: 64px;
+    font-size: 1rem;
+  }
+}
