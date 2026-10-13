@@ -17,7 +17,7 @@ The app follows the viewer's local clock: green walls and pink rooms by day, ind
 ## Try it (for judges)
 > **Status: Monad testnet, demo data.** Every on-chain record so far was made by the author for testing. There are no real users or partner organisations yet.
 
-Contract v4: [`0xb2dD5D6A8681aA7CC298fb29FF5b3fd2d4E5C176`](https://testnet.monadexplorer.com/address/0xb2dD5D6A8681aA7CC298fb29FF5b3fd2d4E5C176) · example face-to-face seal: [`0x995362b3…0039`](https://testnet.monadexplorer.com/tx/0x995362b39e8d50c5f746036b9cbbb164a6aa85c821ab8409d9a0f3dae4190039)
+Contract v4: [`0xb2dD5D6A8681aA7CC298fb29FF5b3fd2d4E5C176`](https://testnet.monadexplorer.com/address/0xb2dD5D6A8681aA7CC298fb29FF5b3fd2d4E5C176) ([source verified, full match](https://testnet.monadvision.com/contracts/full_match/10143/0xb2dD5D6A8681aA7CC298fb29FF5b3fd2d4E5C176/)) · example face-to-face seal: [`0x995362b3…0039`](https://testnet.monadexplorer.com/tx/0x995362b39e8d50c5f746036b9cbbb164a6aa85c821ab8409d9a0f3dae4190039)
 
 Open the live link in **Safari (iPhone) or Chrome (Android / desktop)**. Chat apps' built-in browsers (WeChat, Alipay, Instagram…) don't support passkeys; the app detects them and shows how to switch. No wallet, no test tokens: a relayer pays gas.
 
