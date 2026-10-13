@@ -612,6 +612,7 @@ function Thank({ s, lang, phase, me, helper }: Ctx & { me: Me; helper: Hex }) {
         <div className="center celebrate">
           <Garland phase={phase} left={tileFor(category)} right={TILE.you} />
           <h1>{s.sealed}</h1>
+          <p className="badge-live">{s.faceToFace}</p>
           <p className="quote">{s.thankLanded}</p>
           <button className="secondary" onClick={() => go("/")}>{s.home}</button>
         </div>
@@ -622,9 +623,15 @@ function Thank({ s, lang, phase, me, helper }: Ctx & { me: Me; helper: Hex }) {
     return (
       <Screen s={s} title={s.thankTitle} onBack={() => (setPayload(""), setLive(null))}>
         <div className="sheet center">
+          <div className="hb-summary">
+            <span>
+              <strong>{(CATEGORIES.find((c) => c.id === category) ?? CATEGORIES[0])[lang]} · {formatMinutes(minutes, s)}</strong>
+              <small>{s.someone} {shortId(helper)}</small>
+            </span>
+          </div>
           <HeartbeatCode s={s} payload={payload} digest={live.digest} liveKey={live.key} />
           <p className="instruction">{s.showToHelper}</p>
-          <p className="muted small">{s.heartbeatHint}</p>
+          <p className="hb-hint"><span aria-hidden>⏱</span> {s.heartbeatHint}</p>
         </div>
       </Screen>
     );
@@ -672,13 +679,34 @@ function HeartbeatCode({ s, payload, digest, liveKey }: { s: Strings; payload: s
       clearTimeout(timer);
     };
   }, [digest, liveKey]);
-  if (!beat) return <div className="qr" />;
   return (
     <div className="heartbeat">
-      <QR value={appUrl(`/confirm/${payload}/${beat.code}`)} label={s.showToHelper} />
+      <div className="hb-frame">
+        {/* The ring drains between beats: the code on screen is only ever a moment old. */}
+        <svg className="hb-ring" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
+          <rect className="hb-ring-track" x="1.5" y="1.5" width="97" height="97" rx="9" pathLength={1} />
+          {beat && (
+            <motion.rect
+              key={String(beat.block)}
+              className="hb-ring-live"
+              x="1.5"
+              y="1.5"
+              width="97"
+              height="97"
+              rx="9"
+              pathLength={1}
+              initial={{ pathLength: 1 }}
+              animate={{ pathLength: 0 }}
+              transition={{ duration: 1.1, ease: "linear" }}
+            />
+          )}
+        </svg>
+        {beat ? <QR value={appUrl(`/confirm/${payload}/${beat.code}`)} label={s.showToHelper} /> : <div className="qr hb-connecting">{s.connectingMonad}</div>}
+      </div>
       <p className="heartbeat-line">
-        <motion.span key={String(beat.block)} className="heartbeat-dot" initial={{ scale: 1.8, opacity: 0.3 }} animate={{ scale: 1, opacity: 1 }} aria-hidden />
-        {s.heartbeatBlock(String(beat.block))}
+        <span className="hb-live">LIVE</span>
+        <motion.span key={String(beat?.block)} className="heartbeat-dot" initial={{ scale: 2, opacity: 0.2 }} animate={{ scale: 1, opacity: 1 }} aria-hidden />
+        {beat ? s.heartbeatBlock(String(beat.block)) : "…"}
       </p>
     </div>
   );
@@ -773,6 +801,7 @@ function Confirm({ s, lang, phase, me, setMe, raw, beatRaw }: Ctx & { raw: strin
         <p className="instruction">{s.confirmBody(formatMinutes(p.m, s), cat[lang])}</p>
         <p className="muted small">{s.someone} {shortId(p.r)}</p>
         {p.k && <p className="badge-live">{s.faceToFace}</p>}
+        {p.k && signed && !rescan && <Checks s={s} state={busy ? "checking" : "waiting"} />}
         {signed && rescan ? (
           <>
             <p className="instruction">{s.scanAgain}</p>
@@ -797,6 +826,28 @@ function Confirm({ s, lang, phase, me, setMe, raw, beatRaw }: Ctx & { raw: strin
   );
 }
 
+/** The three things a face-to-face seal proves, shown while Monad checks them and on the receipt. */
+function Checks({ s, state, codeAge }: { s: Strings; state: "waiting" | "checking" | "done"; codeAge?: number | null }) {
+  const items = [s.checkTheirFace, s.checkYourFace, codeAge != null ? s.checkHeartbeatAge(codeAge) : s.checkHeartbeat];
+  return (
+    <ul className={`checks ${state}`}>
+      {items.map((label, i) => (
+        <motion.li
+          key={label}
+          initial={{ opacity: 0, x: -8 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ ...spring, delay: state === "done" ? 1.6 + i * 0.15 : i * 0.12 }}
+        >
+          <span className={state === "checking" && i === 2 ? "check-dot spin" : "check-dot ok"} aria-hidden>
+            {state === "checking" && i === 2 ? "" : "✓"}
+          </span>
+          {label}
+        </motion.li>
+      ))}
+    </ul>
+  );
+}
+
 function Receipt({ s, hash, seconds, codeAge }: { s: Strings; hash: Hex; seconds: string; codeAge?: number | null }) {
   return (
     <motion.div className="receipt" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ ...spring, delay: 1.4 }}>
@@ -805,8 +856,14 @@ function Receipt({ s, hash, seconds, codeAge }: { s: Strings; hash: Hex; seconds
         <strong>{s.receiptTitle}</strong>
         {seconds && <span className="receipt-time">{s.receiptTime(seconds)}</span>}
       </div>
-      <p>{s.receiptSigned}</p>
-      {codeAge != null && <p className="receipt-live">{s.receiptLive(codeAge)}</p>}
+      {codeAge != null ? (
+        <>
+          <p className="receipt-live">{s.faceToFace}</p>
+          <Checks s={s} state="done" codeAge={codeAge} />
+        </>
+      ) : (
+        <p>{s.receiptSigned}</p>
+      )}
       <p className="muted small">{s.receiptWhy}</p>
       <a className="receipt-tx" href={`${chain.EXPLORER}/tx/${hash}`} target="_blank" rel="noreferrer">
         {s.receiptTx} {hash.slice(0, 10)}…{hash.slice(-6)} ↗

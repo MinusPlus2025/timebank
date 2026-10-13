@@ -106,7 +106,7 @@ async function thankAndSeal(receiver, helper, helperId, { category, minutesLabel
   await helper.page.waitForSelector(".celebrate", { timeout: 30000 });
   await helper.page.waitForTimeout(2200);
   await shot(helper, "05-sealed");
-  console.log("receipt:", await helper.page.textContent(".receipt-live"));
+  console.log("receipt:", await helper.page.textContent(".receipt .checks li:last-child"));
   // The receiver's screen sees the seal land on its own.
   await receiver.page.waitForSelector(".celebrate", { timeout: 15000 });
   await receiver.page.waitForTimeout(1200);
@@ -172,7 +172,7 @@ await wang.page.waitForSelector(".live-scan", { timeout: 30000 });
 console.log("stale photo → asked to scan the live screen");
 await shot(wang, "05b-scan-again");
 await wang.page.waitForSelector(".celebrate", { timeout: 30000 });
-console.log("live rescan sealed:", await wang.page.textContent(".receipt-live"));
+console.log("live rescan sealed:", await wang.page.textContent(".receipt .checks li:last-child"));
 console.log("小王 balance:", before, "→", await balance(wang));
 
 // 2. 小王 gives 1 hour to 妈妈 far away.
