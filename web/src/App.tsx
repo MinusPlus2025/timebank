@@ -13,6 +13,7 @@ import { Wordmark } from "./Brand";
 import { CountUp, Door, Facade, Garland, PaperPlane, TILE, WindowTile, spring } from "./Windows";
 import { Onboarding, Street } from "./Onboarding";
 import { LiveScan } from "./LiveScan";
+import { detectInApp, ourRoute, type InApp } from "./inapp";
 import { configureVoice, speak, speakFromTap, useSpeakOnShow, voiceSupported } from "./voice";
 
 // ---------- routing & app state ----------
@@ -411,6 +412,7 @@ function MyCode({ s, phase, me }: Ctx & { me: Me }) {
           <span className="qr-badge"><WindowTile phase={phase} tile={TILE.you} /></span>
         </div>
         <p className="muted">{s.myCodeHint}</p>
+        <button className="primary" onClick={() => go("/scan")}>{s.scanTheirCode}</button>
         <CopyLink url={url} s={s} />
       </div>
     </Screen>
@@ -440,14 +442,55 @@ function DemoScene({ phase, which }: Ctx & { which: string }) {
   );
 }
 
+/** Scans any timebank code in the page itself, so nobody needs WeChat, Alipay or the system camera. */
 function ScanHelp({ s, phase }: Ctx) {
+  const [scanning, setScanning] = useState(false);
+  const [notOurs, setNotOurs] = useState(false);
   useSpeakOnShow(`${s.scanTitle}${s.scanBody}`);
   return (
     <Screen s={s} title={s.scanTitle} onBack={() => go("/")}>
-      <div className="person-window"><WindowTile phase={phase} tile={4} lightAt={0.3} /></div>
-      <p className="instruction">{s.scanBody}</p>
+      {scanning ? (
+        <>
+          <p className="instruction">{s.scanPoint}</p>
+          <LiveScan
+            label={s.scanPoint}
+            onCode={(text) => {
+              const route = ourRoute(text);
+              if (!route) {
+                setNotOurs(true);
+                return false;
+              }
+              go(route);
+              return true;
+            }}
+          />
+          {notOurs && <p className="note warn small">{s.scanNotOurs}</p>}
+        </>
+      ) : (
+        <>
+          <div className="person-window"><WindowTile phase={phase} tile={4} lightAt={0.3} /></div>
+          <p className="instruction">{s.scanBody}</p>
+          <button className="primary" onClick={() => setScanning(true)}>{s.scanNow}</button>
+        </>
+      )}
       <p className="muted">{s.scanCopy}</p>
     </Screen>
+  );
+}
+
+/** Shown inside chat apps' built-in browsers, where passkeys don't work. */
+function OpenInBrowser({ s, lang, app, onClose }: { s: Strings; lang: Lang; app: InApp; onClose: () => void }) {
+  return (
+    <div className="overlay inapp" role="dialog" aria-label={s.inAppTitle}>
+      <span className="inapp-arrow" aria-hidden>↗</span>
+      <section className="settings-sheet">
+        <h2>{s.inAppTitle}</h2>
+        <p className="instruction">{s.inAppBody(app[lang], app.ios)}</p>
+        <p className="muted small">{s.inAppCopy}</p>
+        <CopyLink url={window.location.href} s={s} />
+        <button className="link" onClick={onClose}>{s.inAppContinue}</button>
+      </section>
+    </div>
   );
 }
 
@@ -1228,6 +1271,8 @@ export default function App() {
   const params = new URLSearchParams(window.location.search);
   const [themePref, setThemePref] = useState<ThemePref>(() => readPref("timebank.theme", "time") as ThemePref);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Asked again on every visit: dismissing it doesn't make Face ID work in there.
+  const [inApp, setInApp] = useState(detectInApp);
   const phase = usePhase(themePref, (params.get("phase") as Phase | null) ?? null);
   const [me, setMeState] = useState<Me | null>(loadMe);
   const s = strings[lang];
@@ -1314,6 +1359,14 @@ export default function App() {
           </button>
         </div>
       </header>
+      {inApp && (
+        <OpenInBrowser
+          s={s}
+          lang={lang}
+          app={inApp}
+          onClose={() => setInApp(null)}
+        />
+      )}
       <AnimatePresence>
         {settingsOpen && (
           <motion.div className="overlay" onClick={() => setSettingsOpen(false)} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
