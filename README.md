@@ -2,7 +2,11 @@
 
 **Every bit of care, seen. 每一份付出，都有人看见。**
 
-AI can do things for you. It can't be there for you. TimeBank records time that neighbours give each other. Every hour is sealed in person by **two passkeys** (Face ID / fingerprint) and verified on **Monad** with its native P256 precompile, so the record outlives any operator.
+AI can do things for you. It can't be there for you. TimeBank records time that one person spends with another. Every hour is sealed in person by **two passkeys** (Face ID / fingerprint) and verified on **Monad** with its native P256 precompile, so the record outlives any operator.
+
+**One seal, two uses.**
+- **Neighbours, free.** A community time bank: help someone for an hour, both of you tap Face ID, and the hour is yours for life, in any city. Give it to your parents far away.
+- **Home care, paid.** Care agencies and the people who pay for care (long-term care insurers, Medicaid programmes, care funds) need proof that a visit really happened. Today's checks mostly prove only the carer's side. TimeBank records arrival, departure, and a seal signed by both the carer and the person cared for. Agencies and payers pay per verified visit.
 
 Monad Metropolis 2026 · Track: Trust, Identity & AI Infrastructure · **Live: https://monad-metropolis-2026.vercel.app/**
 
@@ -79,7 +83,24 @@ cd contracts && DEPLOYER_PRIVATE_KEY=0x... npm run deploy
 ```
 Then deploy `web/` to Vercel with the environment variables in `web/.env.example`.
 
+## Business model
+The time bank stays free for people forever. The company earns from organisations that need visits they can trust.
+
+| Who pays | Why they pay | How |
+|---|---|---|
+| Home care agencies | Prove honest carers were really there, answer audits and clawbacks | Per carer per month |
+| Long-term care insurers, Medicaid programmes, care funds | Cut payments for visits that never happened | Per verified visit |
+| Communities and foundations running time banks | Admin console, volunteer certification, cross-city reports | Low annual fee, mostly to grow the network |
+
+- **Why now.** The US 21st Century Cures Act §12006 requires electronic visit verification (EVV) for Medicaid home care. Korea, the UK, Germany and China all run their own checks, and each has known gaps. See `docs/global-markets.md`.
+- **What already works.** Contract v3 has the visit flow: `arrive` (blinded tag, optional location hash) opens a visit, and the two-passkey `seal` closes it and stores claimed vs. present minutes (`VisitClosed`). A carer can have only one open visit at a time.
+- **Moat.** The more agencies and cities accept the record, the more it is worth. Community endorsements are built through operations, not code.
+- **Roadmap.** Agency dashboard and export for payer systems; commitments-only records for health-data rules (HIPAA, GDPR); FIDO2 cards for people without smartphones; later, opening the two-person seal as an API for other in-person checks.
+- **Not decided yet.** Prices. We will set them with the first agencies rather than guess.
+
 ## Honest limits
+- Two signatures stop one-sided fakes. They do not stop a carer and a client who collude; the public record only makes spot checks and anomaly detection cheaper.
+- Selling to insurers and governments is slow. We start with private care agencies and existing time bank networks.
 - We are not the first "blockchain + time bank". Government and consortium-chain pilots exist. Our difference is a public chain, user-held records, cross-community recognition, and two-person passkey seals.
 - A chain fixes record-keeping and trust. It does not fix low participation, which needs community work.
 - Older people may need family or community staff to help them set up a passkey.
