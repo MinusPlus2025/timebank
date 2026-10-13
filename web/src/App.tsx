@@ -183,7 +183,7 @@ function useArrival(visitId: Hex | null | undefined, helper: Hex, secret?: Hex) 
       .then((v) =>
         setArrival(
           v.visitor === helper && !v.closed && v.start
-            ? { start: v.start, minutes: Math.floor((chain.nowSeconds() - v.start) / 60), atHome: secret ? arrivalTag(secret, v.nonce) === v.tag : null }
+            ? { start: v.start, minutes: Math.max(0, Math.floor((chain.nowSeconds() - v.start) / 60)), atHome: secret ? arrivalTag(secret, v.nonce) === v.tag : null }
             : null
         )
       )
@@ -565,7 +565,8 @@ function Thank({ s, lang, phase, me, helper }: Ctx & { me: Me; helper: Hex }) {
   const [redeem, setRedeem] = useState(false);
   const [balance, setBalance] = useState(0);
   const [payload, setPayload] = useState("");
-  const [live, setLive] = useState<{ digest: Hex; key: PrivateKeyAccount } | null>(null);
+  const [live, setLive] = useState<{ digest: Hex; key: PrivateKeyAccount; nonce: number } | null>(null);
+  const [landed, setLanded] = useState(false);
   const { busy, error, run } = useAsync();
   useEffect(() => {
     chain.getMember(me.id).then((m) => setBalance(m.balance)).catch(() => undefined);
@@ -579,14 +580,44 @@ function Thank({ s, lang, phase, me, helper }: Ctx & { me: Me; helper: Hex }) {
       // A throwaway key, kept only in this page's memory, that this screen uses to draw a new
       // heartbeat code every second. Face ID approves exactly this key, so no other screen can.
       const key = privateKeyToAccount(generatePrivateKey());
+      const { nonce } = await chain.getMember(me.id);
       const digest = await chain.inPersonDigest(q, key.address);
       const { assertion } = await signAs(digest, me.id);
       const p: SealPayload = { h: helper, r: me.id, m: minutes, c: category, d: redeem, v: q.visitId, t: q.deadline, a: assertion, k: key.address };
-      setLive({ digest, key });
+      setLive({ digest, key, nonce });
       setPayload(encodeSealPayload(p));
     });
 
-  useSpeakOnShow(payload ? s.showToHelper : `${s.thankTitle}。${s.whatHelp}`);
+  // The receiver's own screen learns the seal landed when their nonce moves on.
+  useEffect(() => {
+    if (!live || landed) return;
+    const t = window.setInterval(() => {
+      chain
+        .getMember(me.id)
+        .then((m) => {
+          if (m.nonce > live.nonce) {
+            setLanded(true);
+            setTimeout(stampFeedback, 300);
+          }
+        })
+        .catch(() => undefined);
+    }, 1500);
+    return () => clearInterval(t);
+  }, [live, landed, me.id]);
+
+  useSpeakOnShow(landed ? `${s.sealed}。${s.thankLanded}` : payload ? s.showToHelper : `${s.thankTitle}。${s.whatHelp}`);
+  if (landed) {
+    return (
+      <Screen s={s}>
+        <div className="center celebrate">
+          <Garland phase={phase} left={tileFor(category)} right={TILE.you} />
+          <h1>{s.sealed}</h1>
+          <p className="quote">{s.thankLanded}</p>
+          <button className="secondary" onClick={() => go("/")}>{s.home}</button>
+        </div>
+      </Screen>
+    );
+  }
   if (payload && live) {
     return (
       <Screen s={s} title={s.thankTitle} onBack={() => (setPayload(""), setLive(null))}>

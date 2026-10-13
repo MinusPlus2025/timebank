@@ -1976,3 +1976,33 @@ body {
   color: #b8423f;
   font-weight: 600;
 }
+
+/* ---------- wrapping polish ---------- */
+h1,
+h2,
+.instruction,
+.quote {
+  text-wrap: balance;
+}
+.sky-meta {
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+.sky-meta strong,
+.sky-links .link,
+.family-actions .link {
+  white-space: nowrap;
+}
+.sky-links {
+  flex-wrap: wrap;
+  column-gap: 14px;
+  row-gap: 4px;
+}
+.family-name {
+  flex: 1;
+  min-width: 0;
+}
+.family-name small {
+  display: block;
+  white-space: nowrap;
+}

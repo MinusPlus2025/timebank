@@ -107,6 +107,10 @@ async function thankAndSeal(receiver, helper, helperId, { category, minutesLabel
   await helper.page.waitForTimeout(2200);
   await shot(helper, "05-sealed");
   console.log("receipt:", await helper.page.textContent(".receipt-live"));
+  // The receiver's screen sees the seal land on its own.
+  await receiver.page.waitForSelector(".celebrate", { timeout: 15000 });
+  await receiver.page.waitForTimeout(1200);
+  await shot(receiver, "05c-receiver-landed");
 }
 
 // Writes the receiver's current heartbeat QR into the fake camera as a one-frame Y4M video.
